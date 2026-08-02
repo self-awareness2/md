@@ -1,0 +1,7 @@
+build/
+build-*/
+out/
+.cache/
+*.user
+*.pro.user
+compile_commands.json
