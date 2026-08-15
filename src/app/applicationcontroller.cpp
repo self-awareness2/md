@@ -17,7 +17,33 @@
 #include <QtGui/QTextDocument>
 #include <QtGui/QPageSize>
 
+#include <algorithm>
+
 namespace {
+
+QString stripFrontMatterForPreview(const QString &markdown)
+{
+    if (!markdown.startsWith(QLatin1String("---\n"))
+        && !markdown.startsWith(QLatin1String("---\r\n"))) {
+        return markdown;
+    }
+    const qsizetype firstBreak = markdown.indexOf(QLatin1Char('\n'));
+    if (firstBreak < 0) {
+        return markdown;
+    }
+    const qsizetype close = markdown.indexOf(QStringLiteral("\n---"), firstBreak + 1);
+    if (close < 0) {
+        return markdown;
+    }
+    qsizetype bodyStart = close + 4;
+    if (bodyStart < markdown.size() && markdown.at(bodyStart) == QLatin1Char('\r')) {
+        ++bodyStart;
+    }
+    if (bodyStart < markdown.size() && markdown.at(bodyStart) == QLatin1Char('\n')) {
+        ++bodyStart;
+    }
+    return markdown.mid(bodyStart);
+}
 
 QString decodeMarkdown(const QByteArray &bytes)
 {
@@ -60,6 +86,9 @@ QString decodeMarkdown(const QByteArray &bytes)
 ApplicationController::ApplicationController(QObject *parent)
     : QObject(parent)
 {
+    m_workspace = new WorkspaceService(this);
+    connect(m_workspace, &WorkspaceService::notificationRequested,
+            this, &ApplicationController::notificationRequested);
     m_recoveryTimer = new QTimer(this);
     m_recoveryTimer->setSingleShot(true);
     m_recoveryTimer->setInterval(1500);
@@ -112,8 +141,26 @@ QString ApplicationController::documentPreviewHtml() const
 
 void ApplicationController::updatePreviewHtml()
 {
-    m_documentPreviewHtml = m_documentHtml;
-    if (m_currentFile.isEmpty() || m_documentPreviewHtml.isEmpty()) {
+    static const QString style = QStringLiteral(
+        "<style>"
+        "body{color:inherit;line-height:1.65;}"
+        "h1,h2,h3,h4,h5,h6{line-height:1.3;margin:1.1em 0 0.45em;font-weight:600;}"
+        "p,ul,ol,blockquote,pre,table{margin:0.75em 0;}"
+        "a{color:#0a84ff;text-decoration:none;}"
+        "code{font-family:Consolas,'Courier New',monospace;background:rgba(127,127,127,0.12);padding:0.1em 0.35em;border-radius:4px;}"
+        "pre{background:rgba(127,127,127,0.12);padding:12px 14px;border-radius:8px;overflow:auto;}"
+        "pre code{background:transparent;padding:0;}"
+        "blockquote{border-left:3px solid #0a84ff;padding:0.2em 0 0.2em 1em;color:#6e6e73;}"
+        "table{border-collapse:collapse;width:100%;}"
+        "th,td{border:1px solid rgba(127,127,127,0.35);padding:6px 10px;}"
+        "th{background:rgba(127,127,127,0.08);}"
+        "hr{border:none;border-top:1px solid rgba(127,127,127,0.35);margin:1.4em 0;}"
+        "img{max-width:100%;}"
+        "ul.contains-task-list{list-style:none;padding-left:1.2em;}"
+        "</style>");
+
+    m_documentPreviewHtml = style + m_documentHtml;
+    if (m_currentFile.isEmpty() || m_documentHtml.isEmpty()) {
         return;
     }
 
@@ -162,6 +209,98 @@ bool ApplicationController::externalChangeDetected() const
 QStringList ApplicationController::recentFiles() const
 {
     return m_recentFiles;
+}
+
+QVariantList ApplicationController::documentBlocks() const
+{
+    return marknote::markdown::DocumentAst::toVariantList(m_blocks);
+}
+
+QVariantList ApplicationController::documentOutline() const
+{
+    return marknote::markdown::DocumentAst::outline(m_blocks);
+}
+
+WorkspaceService *ApplicationController::workspace() const
+{
+    return m_workspace;
+}
+
+void ApplicationController::rebuildAst()
+{
+    const auto previous = m_blocks;
+    m_blocks = marknote::markdown::DocumentAst::reconcile(previous, m_documentText);
+    if (m_blocks.empty() && m_hasDocument) {
+        marknote::markdown::AstBlock empty;
+        empty.id = previous.empty() ? 1 : previous.front().id;
+        empty.kind = marknote::markdown::BlockKind::Paragraph;
+        m_blocks.push_back(std::move(empty));
+    }
+    emit documentBlocksChanged();
+}
+
+void ApplicationController::applyDocumentText(const QString &text, bool markModified)
+{
+    m_documentText = text;
+    m_documentHtml = marknote::markdown::MarkdownRenderer::toHtml(
+        stripFrontMatterForPreview(m_documentText));
+    updatePreviewHtml();
+    if (!m_suppressBlockRebuild) {
+        rebuildAst();
+    }
+    if (markModified) {
+        const bool wasModified = m_modified;
+        m_modified = true;
+        if (m_recoveryTimer) {
+            m_recoveryTimer->start();
+        }
+        emit documentTextChanged();
+        if (!wasModified) {
+            emit modifiedChanged();
+        }
+        return;
+    }
+    emit documentTextChanged();
+}
+
+marknote::markdown::AstBlock *ApplicationController::findBlock(qulonglong blockId)
+{
+    for (auto &block : m_blocks) {
+        if (block.id == static_cast<std::uint64_t>(blockId)) {
+            return &block;
+        }
+    }
+    return nullptr;
+}
+
+void ApplicationController::replaceDocumentFromBlocks()
+{
+    m_documentText = serializeBlocksToDocument();
+    m_documentHtml = marknote::markdown::MarkdownRenderer::toHtml(
+        stripFrontMatterForPreview(m_documentText));
+    updatePreviewHtml();
+    const bool wasModified = m_modified;
+    m_modified = true;
+    if (m_recoveryTimer) {
+        m_recoveryTimer->start();
+    }
+    m_suppressBlockRebuild = true;
+    emit documentTextChanged();
+    m_suppressBlockRebuild = false;
+    rebuildAst();
+    if (!wasModified) {
+        emit modifiedChanged();
+    }
+}
+
+QString ApplicationController::serializeBlocksToDocument() const
+{
+    QStringList pieces;
+    pieces.reserve(static_cast<int>(m_blocks.size()));
+    for (const auto &block : m_blocks) {
+        pieces.push_back(marknote::markdown::DocumentAst::serializeBlock(block));
+    }
+    return pieces.join(QStringLiteral("\n\n"));
 }
 
 void ApplicationController::addRecentFile(const QString &path)
@@ -298,9 +437,6 @@ bool ApplicationController::openPath(const QString &path)
 
     m_currentFile = absolutePath;
     addRecentFile(absolutePath);
-    m_documentText = std::move(text);
-    m_documentHtml = marknote::markdown::MarkdownRenderer::toHtml(m_documentText);
-    updatePreviewHtml();
     m_hasDocument = true;
     watchCurrentFile();
     if (m_externalChangeDetected) {
@@ -309,11 +445,12 @@ bool ApplicationController::openPath(const QString &path)
     }
     const bool wasModified = m_modified;
     m_modified = false;
-    emit currentFileChanged();
-    emit documentTextChanged();
+    m_documentText.clear();
+    applyDocumentText(text, false);
     if (wasModified) {
         emit modifiedChanged();
     }
+    emit currentFileChanged();
     emit notificationRequested(tr("Opened %1").arg(currentFileName()));
     return true;
 }
@@ -323,17 +460,14 @@ void ApplicationController::newDocument()
     clearRecovery();
     const bool wasModified = m_modified;
     m_currentFile.clear();
-    m_documentText.clear();
-    m_documentHtml.clear();
-    m_documentPreviewHtml.clear();
     m_hasDocument = true;
     watchCurrentFile();
     m_modified = false;
-    emit currentFileChanged();
-    emit documentTextChanged();
+    applyDocumentText(QString(), false);
     if (wasModified) {
         emit modifiedChanged();
     }
+    emit currentFileChanged();
 }
 
 void ApplicationController::closeDocument()
@@ -347,11 +481,13 @@ void ApplicationController::closeDocument()
     m_documentText.clear();
     m_documentHtml.clear();
     m_documentPreviewHtml.clear();
+    m_blocks.clear();
     m_hasDocument = false;
     m_modified = false;
     watchCurrentFile();
     emit currentFileChanged();
     emit documentTextChanged();
+    emit documentBlocksChanged();
     if (wasModified) {
         emit modifiedChanged();
     }
@@ -362,19 +498,7 @@ void ApplicationController::setDocumentText(const QString &text)
     if (m_documentText == text) {
         return;
     }
-
-    m_documentText = text;
-    m_documentHtml = marknote::markdown::MarkdownRenderer::toHtml(m_documentText);
-    updatePreviewHtml();
-    const bool wasModified = m_modified;
-    m_modified = true;
-    if (m_recoveryTimer) {
-        m_recoveryTimer->start();
-    }
-    emit documentTextChanged();
-    if (!wasModified) {
-        emit modifiedChanged();
-    }
+    applyDocumentText(text, true);
 }
 
 bool ApplicationController::save()
@@ -579,15 +703,10 @@ bool ApplicationController::recoverDocument()
     }
 
     m_currentFile.clear();
-    m_documentText = text;
-    m_documentHtml = marknote::markdown::MarkdownRenderer::toHtml(m_documentText);
-    updatePreviewHtml();
     m_hasDocument = true;
-    m_modified = true;
     clearRecovery();
+    applyDocumentText(text, true);
     emit currentFileChanged();
-    emit documentTextChanged();
-    emit modifiedChanged();
     emit notificationRequested(tr("Recovered the last unsaved document"));
     return true;
 }
@@ -624,4 +743,134 @@ bool ApplicationController::openLink(const QString &link)
         return false;
     }
     return QDesktopServices::openUrl(resolved);
+}
+
+bool ApplicationController::updateBlockDisplay(qulonglong blockId, const QString &displayText)
+{
+    auto *block = findBlock(blockId);
+    if (!block || block->displayText == displayText) {
+        return false;
+    }
+    block->displayText = displayText;
+    block->source = marknote::markdown::DocumentAst::serializeBlock(*block);
+    replaceDocumentFromBlocks();
+    return true;
+}
+
+bool ApplicationController::setBlockKind(qulonglong blockId, const QString &kindName, int level)
+{
+    auto *block = findBlock(blockId);
+    if (!block) {
+        return false;
+    }
+    const auto kind = marknote::markdown::DocumentAst::kindFromName(kindName);
+    block->kind = kind;
+    if (kind == marknote::markdown::BlockKind::Heading) {
+        block->level = qBound(1, level <= 0 ? 1 : level, 6);
+    }
+    if (kind == marknote::markdown::BlockKind::ListItem && kindName == QLatin1String("task")) {
+        block->task = true;
+    }
+    if (kindName == QLatin1String("ordered")) {
+        block->kind = marknote::markdown::BlockKind::ListItem;
+        block->ordered = true;
+        block->task = false;
+    }
+    if (kindName == QLatin1String("task")) {
+        block->kind = marknote::markdown::BlockKind::ListItem;
+        block->task = true;
+        block->ordered = false;
+    }
+    if (kindName == QLatin1String("list")) {
+        block->ordered = false;
+        block->task = false;
+    }
+    block->source = marknote::markdown::DocumentAst::serializeBlock(*block);
+    replaceDocumentFromBlocks();
+    return true;
+}
+
+bool ApplicationController::toggleTaskChecked(qulonglong blockId)
+{
+    auto *block = findBlock(blockId);
+    if (!block || !block->task) {
+        return false;
+    }
+    block->taskChecked = !block->taskChecked;
+    block->source = marknote::markdown::DocumentAst::serializeBlock(*block);
+    replaceDocumentFromBlocks();
+    return true;
+}
+
+bool ApplicationController::insertBlockAfter(qulonglong blockId, const QString &kindName)
+{
+    marknote::markdown::AstBlock created;
+    created.id = 0;
+    for (const auto &block : m_blocks) {
+        created.id = std::max(created.id, block.id);
+    }
+    ++created.id;
+    if (kindName == QLatin1String("task") || kindName == QLatin1String("ordered")) {
+        created.kind = marknote::markdown::BlockKind::ListItem;
+        created.task = kindName == QLatin1String("task");
+        created.ordered = kindName == QLatin1String("ordered");
+        created.displayText = QStringLiteral("List item");
+    } else {
+        created.kind = marknote::markdown::DocumentAst::kindFromName(kindName);
+        if (created.kind == marknote::markdown::BlockKind::Heading) {
+            created.level = 2;
+            created.displayText = QStringLiteral("Heading");
+        } else if (created.kind == marknote::markdown::BlockKind::CodeBlock) {
+            created.displayText = QString();
+        } else if (created.kind == marknote::markdown::BlockKind::ThematicBreak) {
+            created.displayText = QStringLiteral("---");
+        } else if (created.kind == marknote::markdown::BlockKind::ListItem) {
+            created.displayText = QStringLiteral("List item");
+        } else if (created.kind == marknote::markdown::BlockKind::Table) {
+            created.displayText = QStringLiteral("| Column 1 | Column 2 |\n| --- | --- |\n|  |  |");
+            created.source = created.displayText;
+        } else {
+            created.displayText = QString();
+        }
+    }
+    if (created.source.isEmpty()) {
+        created.source = marknote::markdown::DocumentAst::serializeBlock(created);
+    }
+
+    if (m_blocks.empty()) {
+        m_blocks.push_back(created);
+    } else {
+        bool inserted = false;
+        for (size_t i = 0; i < m_blocks.size(); ++i) {
+            if (m_blocks[i].id == static_cast<std::uint64_t>(blockId)) {
+                m_blocks.insert(m_blocks.begin() + static_cast<std::ptrdiff_t>(i + 1), created);
+                inserted = true;
+                break;
+            }
+        }
+        if (!inserted) {
+            m_blocks.push_back(created);
+        }
+    }
+    replaceDocumentFromBlocks();
+    return true;
+}
+
+bool ApplicationController::deleteBlock(qulonglong blockId)
+{
+    const auto it = std::find_if(m_blocks.begin(), m_blocks.end(), [blockId](const auto &block) {
+        return block.id == static_cast<std::uint64_t>(blockId);
+    });
+    if (it == m_blocks.end()) {
+        return false;
+    }
+    m_blocks.erase(it);
+    if (m_blocks.empty()) {
+        marknote::markdown::AstBlock empty;
+        empty.id = 1;
+        empty.kind = marknote::markdown::BlockKind::Paragraph;
+        m_blocks.push_back(empty);
+    }
+    replaceDocumentFromBlocks();
+    return true;
 }

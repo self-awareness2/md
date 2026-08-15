@@ -27,66 +27,72 @@ ApplicationWindow {
         highlightedText: "#ffffff"
     }
 
-    Component.onCompleted: { rebuildOutline(); rebuildBlocks() }
-
     property int viewMode: 2 // 0: source, 1: preview, 2: split, 3: block
     property bool sidebarVisible: true
     property bool darkMode: false
     property bool findVisible: false
+    property bool focusMode: false
+    property bool commandPaletteVisible: false
     property real fontScale: 1.0
+    property string workspaceFilter: ""
 
     function zoomIn() { fontScale = Math.min(1.6, fontScale + 0.1) }
     function zoomOut() { fontScale = Math.max(0.7, fontScale - 0.1) }
     function resetZoom() { fontScale = 1.0 }
-
-    onViewModeChanged: if (viewMode === 3) rebuildBlocks()
-
-    ListModel { id: outlineModel }
-    ListModel { id: blockModel }
-    function rebuildOutline() {
-        outlineModel.clear()
-        const lines = appController.documentText.split("\n")
-        let offset = 0
-        for (let i = 0; i < lines.length; ++i) {
-            const match = /^(#{1,6})\s+(.+?)\s*$/.exec(lines[i])
-            if (match) {
-                outlineModel.append({title: match[2], level: match[1].length, position: offset})
-            }
-            offset += lines[i].length + 1
+    function toggleFocusMode() {
+        focusMode = !focusMode
+        if (focusMode) {
+            sidebarVisible = false
+        }
+    }
+    function runCommand(id) {
+        commandPaletteVisible = false
+        switch (id) {
+        case "new": appController.newDocument(); break
+        case "open": appController.openFile(); break
+        case "save": appController.save(); break
+        case "workspace": appController.workspace.openFolder(); break
+        case "source": viewMode = 0; break
+        case "split": viewMode = 2; break
+        case "preview": viewMode = 1; break
+        case "blocks": viewMode = 3; break
+        case "focus": toggleFocusMode(); break
+        case "dark": darkMode = !darkMode; break
+        case "find": findVisible = true; break
+        case "export-html": appController.exportHtmlAs(); break
+        case "export-pdf": appController.exportPdfAs(); break
+        case "image": appController.insertImage(); break
+        case "heading": if (viewMode === 3) blockPane.convertActive("heading", 2); else editorPane.prefixLine("## "); break
+        case "bullet": if (viewMode === 3) blockPane.convertActive("list"); else editorPane.prefixLine("- "); break
+        case "task": if (viewMode === 3) blockPane.convertActive("task"); else editorPane.prefixLine("- [ ] "); break
+        case "quote": if (viewMode === 3) blockPane.convertActive("quote"); else editorPane.prefixLine("> "); break
+        case "code": if (viewMode === 3) blockPane.convertActive("code"); else editorPane.insertSnippet("```\n\n```"); break
+        case "table": if (viewMode === 3) blockPane.insertTable(); else editorPane.insertTable(); break
         }
     }
 
-    function rebuildBlocks() {
-        blockModel.clear()
-        if (!appController.hasDocument) {
-            return
-        }
-        const source = appController.documentText
-        const chunks = source.split(/\n\s*\n/)
-        for (let i = 0; i < chunks.length; ++i) {
-            const block = chunks[i]
-            if (block.length === 0) {
-                continue
-            }
-            let kind = "paragraph"
-            let level = 0
-            if (/^#{1,6}\s/.test(block)) {
-                kind = "heading"
-                level = /^#+/.exec(block)[0].length
-            } else if (/^```/.test(block) || /^~~~/.test(block) || /^ {4}/.test(block)) {
-                kind = "code"
-            } else if (/^>\s?/.test(block)) {
-                kind = "quote"
-            } else if (/^(?:[-+*]\s|\d+[.)]\s|[-+*]\s+\[[ xX]\]\s)/.test(block)) {
-                kind = "list"
-            } else if (/^\|.*\|\s*\n\|?\s*:?-{3,}/.test(block)) {
-                kind = "table"
-            } else if (/^(?:---+|\*\*\*+|___+)$/.test(block.trim())) {
-                kind = "rule"
-            }
-            blockModel.append({source: block, kind: kind, level: level})
-        }
-    }
+    readonly property var commandItems: [
+        { id: "new", title: qsTr("New Document"), shortcut: "Ctrl+N" },
+        { id: "open", title: qsTr("Open File"), shortcut: "Ctrl+O" },
+        { id: "save", title: qsTr("Save"), shortcut: "Ctrl+S" },
+        { id: "workspace", title: qsTr("Open Workspace Folder"), shortcut: "Ctrl+Shift+O" },
+        { id: "source", title: qsTr("Source Mode"), shortcut: "Ctrl+1" },
+        { id: "split", title: qsTr("Split Mode"), shortcut: "Ctrl+2" },
+        { id: "preview", title: qsTr("Preview Mode"), shortcut: "Ctrl+3" },
+        { id: "blocks", title: qsTr("Block Editing Mode"), shortcut: "Ctrl+4" },
+        { id: "focus", title: qsTr("Toggle Focus Mode"), shortcut: "F11" },
+        { id: "dark", title: qsTr("Toggle Dark Appearance"), shortcut: "" },
+        { id: "find", title: qsTr("Find in Document"), shortcut: "Ctrl+F" },
+        { id: "heading", title: qsTr("Insert Heading"), shortcut: "" },
+        { id: "bullet", title: qsTr("Insert Bullet List"), shortcut: "" },
+        { id: "task", title: qsTr("Insert Task List"), shortcut: "" },
+        { id: "quote", title: qsTr("Insert Quote"), shortcut: "" },
+        { id: "code", title: qsTr("Insert Code Block"), shortcut: "" },
+        { id: "table", title: qsTr("Insert Table"), shortcut: "" },
+        { id: "image", title: qsTr("Insert Image"), shortcut: "" },
+        { id: "export-html", title: qsTr("Export HTML"), shortcut: "" },
+        { id: "export-pdf", title: qsTr("Export PDF"), shortcut: "" }
+    ]
 
     Action { id: newAction; text: qsTr("New Document"); shortcut: StandardKey.New; onTriggered: appController.newDocument() }
     Action { id: openAction; text: qsTr("Open..."); shortcut: StandardKey.Open; onTriggered: appController.openFile() }
@@ -97,15 +103,24 @@ ApplicationWindow {
     Action { id: undoAction; text: qsTr("Undo"); shortcut: StandardKey.Undo; onTriggered: viewMode === 3 ? blockPane.undo() : editorPane.undo() }
     Action { id: redoAction; text: qsTr("Redo"); shortcut: StandardKey.Redo; onTriggered: viewMode === 3 ? blockPane.redo() : editorPane.redo() }
     Action { id: findAction; text: qsTr("Find"); shortcut: StandardKey.Find; onTriggered: findVisible = true }
+    Action { id: commandPaletteAction; text: qsTr("Command Palette"); shortcut: "Ctrl+Shift+P"; onTriggered: commandPaletteVisible = true }
+    Action { id: focusModeAction; text: qsTr("Focus Mode"); shortcut: "F11"; onTriggered: toggleFocusMode() }
+    Action { id: openWorkspaceAction; text: qsTr("Open Workspace..."); shortcut: "Ctrl+Shift+O"; onTriggered: appController.workspace.openFolder() }
+    Action { id: sourceModeAction; text: qsTr("Source"); shortcut: "Ctrl+1"; onTriggered: viewMode = 0 }
+    Action { id: splitModeAction; text: qsTr("Split"); shortcut: "Ctrl+2"; onTriggered: viewMode = 2 }
+    Action { id: previewModeAction; text: qsTr("Preview"); shortcut: "Ctrl+3"; onTriggered: viewMode = 1 }
+    Action { id: blockModeAction; text: qsTr("Blocks"); shortcut: "Ctrl+4"; onTriggered: viewMode = 3 }
     Action { id: zoomInAction; text: qsTr("Zoom In"); shortcut: "Ctrl+="; onTriggered: zoomIn() }
     Action { id: zoomOutAction; text: qsTr("Zoom Out"); shortcut: "Ctrl+-"; onTriggered: zoomOut() }
     Action { id: resetZoomAction; text: qsTr("Reset Zoom"); shortcut: "Ctrl+0"; onTriggered: resetZoom() }
 
     menuBar: MenuBar {
+        visible: !focusMode
         Menu {
             title: qsTr("File")
             Action { text: newAction.text; shortcut: newAction.shortcut; onTriggered: newAction.trigger() }
             Action { text: openAction.text; shortcut: openAction.shortcut; onTriggered: openAction.trigger() }
+            Action { text: openWorkspaceAction.text; shortcut: openWorkspaceAction.shortcut; onTriggered: openWorkspaceAction.trigger() }
             MenuSeparator {}
             Action { text: saveAction.text; shortcut: saveAction.shortcut; onTriggered: saveAction.trigger() }
             Action { text: saveAsAction.text; shortcut: saveAsAction.shortcut; onTriggered: saveAsAction.trigger() }
@@ -120,6 +135,13 @@ ApplicationWindow {
             Action { text: redoAction.text; shortcut: redoAction.shortcut; onTriggered: redoAction.trigger() }
             MenuSeparator {}
             Action { text: findAction.text; shortcut: findAction.shortcut; onTriggered: findAction.trigger() }
+            Action { text: commandPaletteAction.text; shortcut: commandPaletteAction.shortcut; onTriggered: commandPaletteAction.trigger() }
+            MenuSeparator {}
+            Action { text: qsTr("Bold"); shortcut: "Ctrl+B"; onTriggered: editorPane.wrapSelection("**", "**") }
+            Action { text: qsTr("Italic"); shortcut: "Ctrl+I"; onTriggered: editorPane.wrapSelection("*", "*") }
+            Action { text: qsTr("Strikethrough"); shortcut: "Ctrl+Shift+X"; onTriggered: editorPane.wrapSelection("~~", "~~") }
+            Action { text: qsTr("Inline Code"); shortcut: "Ctrl+`"; onTriggered: editorPane.wrapSelection("`", "`") }
+            Action { text: qsTr("Link"); shortcut: "Ctrl+K"; onTriggered: editorPane.wrapSelection("[", "](url)") }
         }
         Menu {
             title: qsTr("View")
@@ -129,6 +151,7 @@ ApplicationWindow {
             Action { text: qsTr("Block Editing"); checkable: true; checked: viewMode === 3; onTriggered: viewMode = 3 }
             MenuSeparator {}
             Action { text: qsTr("Toggle Sidebar"); shortcut: "Ctrl+Shift+B"; onTriggered: sidebarVisible = !sidebarVisible }
+            Action { text: focusModeAction.text; shortcut: focusModeAction.shortcut; checkable: true; checked: focusMode; onTriggered: toggleFocusMode() }
             Action { text: qsTr("Toggle Dark Appearance"); checkable: true; checked: darkMode; onTriggered: darkMode = !darkMode }
             MenuSeparator {}
             Action { text: zoomInAction.text; shortcut: zoomInAction.shortcut; onTriggered: zoomInAction.trigger() }
@@ -139,7 +162,8 @@ ApplicationWindow {
 
     header: ToolBar {
         id: toolbar
-        height: 54
+        visible: !focusMode
+        height: focusMode ? 0 : 54
         background: Rectangle { color: theme.panel; border.color: theme.divider; border.width: 1 }
         contentItem: RowLayout {
             spacing: 6
@@ -200,12 +224,25 @@ ApplicationWindow {
                 spacing: 0
                 ToolButton { text: "B"; font.bold: true; onClicked: editorPane.wrapSelection("**", "**"); ToolTip.visible: hovered; ToolTip.text: qsTr("Bold") }
                 ToolButton { text: "I"; font.italic: true; onClicked: editorPane.wrapSelection("*", "*"); ToolTip.visible: hovered; ToolTip.text: qsTr("Italic") }
+                ToolButton { text: "S"; onClicked: editorPane.wrapSelection("~~", "~~"); ToolTip.visible: hovered; ToolTip.text: qsTr("Strikethrough") }
                 ToolButton { text: "`"; onClicked: editorPane.wrapSelection("`", "`"); ToolTip.visible: hovered; ToolTip.text: qsTr("Inline code") }
                 ToolButton { text: "H"; onClicked: editorPane.prefixLine("## "); ToolTip.visible: hovered; ToolTip.text: qsTr("Heading") }
                 ToolButton { text: "-"; onClicked: editorPane.prefixLine("- "); ToolTip.visible: hovered; ToolTip.text: qsTr("Bullet list") }
+                ToolButton { text: "☑"; onClicked: editorPane.prefixLine("- [ ] "); ToolTip.visible: hovered; ToolTip.text: qsTr("Task list") }
                 ToolButton { text: "T"; onClicked: editorPane.insertTable(); ToolTip.visible: hovered; ToolTip.text: qsTr("Insert table") }
             }
-            ToolButton { visible: viewMode === 3; text: "T"; onClicked: blockPane.insertTable(); ToolTip.visible: hovered; ToolTip.text: qsTr("Insert table block") }
+            RowLayout {
+                visible: viewMode === 3
+                spacing: 0
+                ToolButton { text: "H"; onClicked: blockPane.convertActive("heading", 2); ToolTip.visible: hovered; ToolTip.text: qsTr("Heading block") }
+                ToolButton { text: "-"; onClicked: blockPane.convertActive("list"); ToolTip.visible: hovered; ToolTip.text: qsTr("List block") }
+                ToolButton { text: "☑"; onClicked: blockPane.convertActive("task"); ToolTip.visible: hovered; ToolTip.text: qsTr("Task block") }
+                ToolButton { text: ">"; onClicked: blockPane.convertActive("quote"); ToolTip.visible: hovered; ToolTip.text: qsTr("Quote block") }
+                ToolButton { text: "</>"; onClicked: blockPane.convertActive("code"); ToolTip.visible: hovered; ToolTip.text: qsTr("Code block") }
+                ToolButton { text: "T"; onClicked: blockPane.insertTable(); ToolTip.visible: hovered; ToolTip.text: qsTr("Insert table block") }
+            }
+            ToolButton { text: qsTr("Focus"); checkable: true; checked: focusMode; onClicked: toggleFocusMode(); ToolTip.visible: hovered; ToolTip.text: qsTr("Focus mode") }
+            ToolButton { text: "⌘"; onClicked: commandPaletteVisible = true; ToolTip.visible: hovered; ToolTip.text: qsTr("Command palette") }
             ToolButton {
                 icon.name: "document-export"
                 display: AbstractButton.IconOnly
@@ -225,29 +262,75 @@ ApplicationWindow {
         spacing: 0
 
         Pane {
-            visible: sidebarVisible
-            Layout.preferredWidth: 248
+            visible: sidebarVisible && !focusMode
+            Layout.preferredWidth: 268
             Layout.fillHeight: true
             padding: 16
             background: Rectangle { color: theme.panel; border.color: theme.divider; border.width: 1 }
             ColumnLayout {
                 anchors.fill: parent
-                spacing: 12
-                Label { text: qsTr("WORKSPACE"); color: theme.faintText; font.pixelSize: 11; font.weight: Font.DemiBold; Layout.bottomMargin: 4 }
-                Rectangle {
+                spacing: 10
+                RowLayout {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 42
-                    radius: theme.smallRadius
-                    color: appController.hasDocument ? theme.accentSoft : "transparent"
-                    RowLayout {
-                        anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 8; spacing: 8
-                        Label { text: "*"; color: theme.accent; font.pixelSize: 18; visible: appController.hasDocument }
-                        Label {
-                            text: appController.hasDocument ? appController.currentFileName : qsTr("No document open")
-                            color: appController.hasDocument ? theme.text : theme.mutedText
-                            elide: Text.ElideMiddle; Layout.fillWidth: true
-                        }
+                    Label { text: qsTr("WORKSPACE"); color: theme.faintText; font.pixelSize: 11; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                    ToolButton {
+                        text: appController.workspace.hasWorkspace ? qsTr("↻") : qsTr("+")
+                        onClicked: appController.workspace.hasWorkspace ? appController.workspace.refresh() : appController.workspace.openFolder()
+                        ToolTip.visible: hovered
+                        ToolTip.text: appController.workspace.hasWorkspace ? qsTr("Refresh workspace") : qsTr("Open workspace folder")
                     }
+                }
+                Label {
+                    text: appController.workspace.hasWorkspace ? appController.workspace.rootName : qsTr("No folder open")
+                    color: theme.text
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideMiddle
+                    Layout.fillWidth: true
+                }
+                TextField {
+                    visible: appController.workspace.hasWorkspace
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("Filter files")
+                    text: workspaceFilter
+                    onTextChanged: workspaceFilter = text
+                }
+                ListView {
+                    id: workspaceList
+                    visible: appController.workspace.hasWorkspace
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(contentHeight, 180)
+                    clip: true
+                    model: {
+                        // Depend on markdownFiles so refreshes re-evaluate the filter.
+                        const allFiles = appController.workspace.markdownFiles
+                        return workspaceFilter.length === 0
+                               ? allFiles
+                               : appController.workspace.searchFiles(workspaceFilter)
+                    }
+                    delegate: ItemDelegate {
+                        width: ListView.view.width
+                        height: 28
+                        text: {
+                            const root = appController.workspace.rootPath
+                            const path = modelData
+                            if (root.length > 0 && path.indexOf(root) === 0) {
+                                return path.slice(root.length).replace(/^[\\/]/, "")
+                            }
+                            return path
+                        }
+                        font.pixelSize: 11
+                        highlighted: appController.currentFile === modelData
+                        onClicked: appController.openPath(modelData)
+                    }
+                }
+                Label {
+                    visible: !appController.workspace.hasWorkspace
+                    text: qsTr("Open a folder to browse Markdown files.")
+                    color: theme.mutedText
+                    font.pixelSize: 11
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
                 }
                 RowLayout {
                     Layout.fillWidth: true
@@ -256,35 +339,41 @@ ApplicationWindow {
                 }
                 ListView {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(contentHeight, 150)
+                    Layout.preferredHeight: Math.min(contentHeight, 120)
                     model: appController.recentFiles
                     clip: true
                     delegate: ItemDelegate {
                         width: ListView.view.width
                         height: 28
-                        text: modelData
+                        text: modelData.split(/[\\/]/).pop()
                         font.pixelSize: 11
                         onClicked: appController.openPath(modelData)
                     }
                     visible: count > 0
                 }
-                Label { text: qsTr("OUTLINE"); color: theme.faintText; font.pixelSize: 11; font.weight: Font.DemiBold; Layout.topMargin: 8 }
+                Label { text: qsTr("OUTLINE"); color: theme.faintText; font.pixelSize: 11; font.weight: Font.DemiBold; Layout.topMargin: 4 }
                 ListView {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(contentHeight, 260)
-                    model: outlineModel
+                    Layout.fillHeight: true
+                    model: appController.documentOutline
                     clip: true
                     delegate: ItemDelegate {
                         width: ListView.view.width
                         height: 30
-                        leftPadding: 8 + (level - 1) * 12
-                        text: title
+                        leftPadding: 8 + ((modelData.level || 1) - 1) * 12
+                        text: modelData.title
                         font.pixelSize: 12
-                        onClicked: editorPane.revealPosition(position)
+                        onClicked: {
+                            if (viewMode === 3) {
+                                blockPane.focusNear(modelData.position)
+                            } else {
+                                editorPane.revealPosition(modelData.position)
+                                if (viewMode === 1) viewMode = 2
+                            }
+                        }
                     }
                     visible: count > 0
                 }
-                Item { Layout.fillHeight: true }
                 Label { text: qsTr("LOCAL DOCUMENT"); color: theme.faintText; font.pixelSize: 11; font.weight: Font.DemiBold }
                 Label { text: appController.hasDocument ? appController.currentFile : qsTr("Open a Markdown file to get started"); color: theme.mutedText; font.pixelSize: 11; wrapMode: Text.Wrap; Layout.fillWidth: true }
             }
@@ -436,6 +525,39 @@ ApplicationWindow {
             editor.cursorPosition = start + prefix.length
             editor.forceActiveFocus()
         }
+        function continueListOrExit(event) {
+            const pos = editor.cursorPosition
+            const lineStart = editor.text.lastIndexOf("\n", Math.max(0, pos - 1)) + 1
+            const lineEnd = editor.text.indexOf("\n", pos)
+            const line = editor.text.substring(lineStart, lineEnd < 0 ? editor.text.length : lineEnd)
+            const match = /^(\s*)([-+*]|\d+[.)])(\s+(?:\[[ xX]\]\s+)?)(.*)$/.exec(line)
+            if (!match) {
+                return false
+            }
+            const indent = match[1]
+            const marker = match[2]
+            const taskOrSpace = match[3]
+            const content = match[4]
+            if (content.length === 0) {
+                editor.remove(lineStart, pos)
+                event.accepted = true
+                return true
+            }
+            let nextMarker = marker
+            const ordered = /^(\d+)([.)])$/.exec(marker)
+            if (ordered) {
+                nextMarker = String(Number(ordered[1]) + 1) + ordered[2]
+            }
+            let nextTask = taskOrSpace
+            if (/\[[ xX]\]/.test(taskOrSpace)) {
+                nextTask = " [ ] "
+            }
+            const insertion = "\n" + indent + nextMarker + nextTask
+            editor.insert(pos, insertion)
+            editor.cursorPosition = pos + insertion.length
+            event.accepted = true
+            return true
+        }
         id: editorScroll
         clip: true
         TextArea {
@@ -449,13 +571,21 @@ ApplicationWindow {
             selectedTextColor: theme.text
             font.family: "Segoe UI"
             font.pixelSize: 16 * window.fontScale
-            leftPadding: 34; rightPadding: 34; topPadding: 24; bottomPadding: 40
+            leftPadding: focusMode ? Math.max(48, (window.width - 760) / 2) : 34
+            rightPadding: focusMode ? Math.max(48, (window.width - 760) / 2) : 34
+            topPadding: focusMode ? 48 : 24
+            bottomPadding: 40
             background: Rectangle { color: theme.document }
             onTextChanged: if (activeFocus) appController.setDocumentText(text)
             Keys.onPressed: function(event) {
                 if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_S) { appController.save(); event.accepted = true }
                 else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_B) { editorPane.wrapSelection("**", "**"); event.accepted = true }
                 else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_I) { editorPane.wrapSelection("*", "*"); event.accepted = true }
+                else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    if (!(event.modifiers & Qt.ControlModifier) && editorPane.continueListOrExit(event)) {
+                        return
+                    }
+                }
             }
         }
         MarkdownSyntaxHighlighter {
@@ -481,6 +611,8 @@ ApplicationWindow {
 
     component BlockPane: ScrollView {
         property int activeIndex: -1
+        property var activeBlock: activeIndex >= 0 && activeIndex < appController.documentBlocks.length
+                                  ? appController.documentBlocks[activeIndex] : null
         function undo() {
             const item = activeIndex >= 0 ? listView.itemAtIndex(activeIndex) : null
             if (item && item.editorObject) item.editorObject.undo()
@@ -489,32 +621,34 @@ ApplicationWindow {
             const item = activeIndex >= 0 ? listView.itemAtIndex(activeIndex) : null
             if (item && item.editorObject) item.editorObject.redo()
         }
-        function syncSource() {
-            const pieces = []
-            for (let i = 0; i < blockModel.count; ++i) {
-                pieces.push(blockModel.get(i).source)
-            }
-            appController.setDocumentText(pieces.join("\n\n"))
+        function commitBlock(blockId, value) {
+            appController.updateBlockDisplay(blockId, value)
         }
-        function commitBlock(blockIndex, value) {
-            if (blockIndex < 0 || blockIndex >= blockModel.count) {
+        function convertActive(kind, level) {
+            if (!activeBlock) {
                 return
             }
-            if (blockModel.get(blockIndex).source === value) {
-                return
-            }
-            blockModel.setProperty(blockIndex, "source", value)
-            syncSource()
+            appController.setBlockKind(activeBlock.id, kind, level || 0)
         }
         function addBlock() {
-            blockModel.append({source: "", kind: "paragraph", level: 0})
-            syncSource()
-            listView.currentIndex = blockModel.count - 1
+            const afterId = activeBlock ? activeBlock.id : 0
+            appController.insertBlockAfter(afterId, "paragraph")
+            listView.currentIndex = Math.min(activeIndex + 1, appController.documentBlocks.length - 1)
         }
         function insertTable() {
-            blockModel.append({source: "| Column 1 | Column 2 |\n| --- | --- |\n|  |  |", kind: "table", level: 0})
-            syncSource()
-            listView.currentIndex = blockModel.count - 1
+            const afterId = activeBlock ? activeBlock.id : 0
+            appController.insertBlockAfter(afterId, "table")
+        }
+        function focusNear(position) {
+            const blocks = appController.documentBlocks
+            let best = 0
+            for (let i = 0; i < blocks.length; ++i) {
+                if (blocks[i].begin <= position) {
+                    best = i
+                }
+            }
+            listView.currentIndex = best
+            listView.positionViewAtIndex(best, ListView.Center)
         }
         clip: true
         ListView {
@@ -525,44 +659,124 @@ ApplicationWindow {
             anchors.bottom: addButton.top
             anchors.topMargin: 18
             anchors.bottomMargin: 12
-            model: blockModel
-            spacing: 10
+            model: appController.documentBlocks
+            spacing: 12
             delegate: Item {
+                id: blockDelegate
                 property var editorObject: null
+                property var block: modelData
                 width: ListView.view.width
-                height: Math.max(58, blockEditor.contentHeight + 22)
-                TextArea {
-                    id: blockEditor
+                height: kind === "rule" ? 36 : Math.max(58, blockRow.implicitHeight + 8)
+                readonly property string kind: block.kind
+                readonly property int level: block.level || 0
+                RowLayout {
+                    id: blockRow
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    anchors.leftMargin: 40
-                    anchors.rightMargin: 40
+                    anchors.leftMargin: focusMode ? Math.max(40, (window.width - 780) / 2) : 40
+                    anchors.rightMargin: focusMode ? Math.max(40, (window.width - 780) / 2) : 40
                     anchors.top: parent.top
-                    text: source
-                    wrapMode: TextEdit.Wrap
-                    selectByMouse: true
-                    color: theme.text
-                    selectionColor: theme.selection
-                    selectedTextColor: theme.text
-                    font.family: kind === "code" ? "Consolas" : "Segoe UI"
-                    font.pixelSize: (kind === "heading" ? Math.max(18, 30 - level * 2) : 16) * window.fontScale
-                    font.bold: kind === "heading"
-                    leftPadding: 12
-                    rightPadding: 12
-                    topPadding: 10
-                    bottomPadding: 10
-                    background: Rectangle {
-                        color: kind === "code" ? theme.codeBackground : kind === "table" ? theme.accentSoft : theme.document
-                        radius: theme.smallRadius
-                        border.color: blockEditor.activeFocus ? theme.accent : theme.divider
-                        border.width: blockEditor.activeFocus ? 2 : 1
+                    spacing: 8
+                    CheckBox {
+                        visible: kind === "list" && block.task
+                        checked: !!block.taskChecked
+                        onToggled: appController.toggleTaskChecked(block.id)
                     }
-                    onTextChanged: if (activeFocus) blockPane.commitBlock(index, text)
-                    onActiveFocusChanged: if (activeFocus) blockPane.activeIndex = index
-                    Keys.onPressed: function(event) {
-                        if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Enter) {
-                            blockPane.addBlock()
-                            event.accepted = true
+                    Label {
+                        visible: kind === "rule"
+                        text: "—"
+                        color: theme.faintText
+                        font.pixelSize: 18
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+                    TextArea {
+                        id: blockEditor
+                        visible: kind !== "rule"
+                        Layout.fillWidth: true
+                        text: block.displayText // initial; Binding keeps it fresh while unfocused
+                        wrapMode: TextEdit.Wrap
+                        selectByMouse: true
+                        readOnly: kind === "frontmatter"
+                        color: theme.text
+                        selectionColor: theme.selection
+                        selectedTextColor: theme.text
+                        font.family: kind === "code" || kind === "frontmatter" ? "Consolas" : "Segoe UI"
+                        font.pixelSize: (kind === "heading" ? Math.max(18, 32 - level * 2) : 16) * window.fontScale
+                        font.bold: kind === "heading"
+                        font.italic: kind === "quote"
+                        leftPadding: kind === "quote" ? 18 : 12
+                        rightPadding: 12
+                        topPadding: 10
+                        bottomPadding: 10
+                        background: Rectangle {
+                            color: kind === "code" || kind === "frontmatter" ? theme.codeBackground
+                                   : kind === "table" ? theme.accentSoft
+                                   : kind === "quote" ? theme.panel
+                                   : theme.document
+                            radius: theme.smallRadius
+                            border.color: blockEditor.activeFocus ? theme.accent : (kind === "quote" ? theme.accent : theme.divider)
+                            border.width: blockEditor.activeFocus ? 2 : (kind === "quote" ? 0 : 1)
+                            Rectangle {
+                                visible: kind === "quote"
+                                width: 3
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                color: theme.accent
+                            }
+                        }
+                        Binding {
+                            target: blockEditor
+                            property: "text"
+                            value: block.displayText
+                            when: !blockEditor.activeFocus
+                            restoreMode: Binding.RestoreNone
+                        }
+                        onActiveFocusChanged: {
+                            if (activeFocus) {
+                                blockPane.activeIndex = index
+                            } else if (text !== block.displayText) {
+                                blockPane.commitBlock(block.id, text)
+                            }
+                        }
+                        Keys.onPressed: function(event) {
+                            if ((event.modifiers & Qt.ControlModifier) && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+                                if (text !== block.displayText) {
+                                    blockPane.commitBlock(block.id, text)
+                                }
+                                blockPane.addBlock()
+                                event.accepted = true
+                            } else if (event.key === Qt.Key_Backspace && blockEditor.text.length === 0 && appController.documentBlocks.length > 1) {
+                                appController.deleteBlock(block.id)
+                                event.accepted = true
+                            }
+                        }
+                        onEditingFinished: {
+                            const value = text
+                            if (value !== block.displayText) {
+                                blockPane.commitBlock(block.id, value)
+                            }
+                            if (kind === "paragraph") {
+                                if (/^#{1,6}\s/.test(value)) {
+                                    const level = /^(#+)/.exec(value)[1].length
+                                    const body = value.replace(/^#{1,6}\s+/, "")
+                                    appController.updateBlockDisplay(block.id, body)
+                                    appController.setBlockKind(block.id, "heading", level)
+                                } else if (/^[-*+]\s+\[[ xX]\]\s/.test(value)) {
+                                    appController.updateBlockDisplay(block.id, value.replace(/^[-*+]\s+\[[ xX]\]\s+/, ""))
+                                    appController.setBlockKind(block.id, "task")
+                                } else if (/^[-*+]\s+/.test(value)) {
+                                    appController.updateBlockDisplay(block.id, value.replace(/^[-*+]\s+/, ""))
+                                    appController.setBlockKind(block.id, "list")
+                                } else if (/^>\s?/.test(value)) {
+                                    appController.updateBlockDisplay(block.id, value.replace(/^>\s?/, ""))
+                                    appController.setBlockKind(block.id, "quote")
+                                } else if (/^```/.test(value)) {
+                                    appController.updateBlockDisplay(block.id, value.replace(/^```[^\n]*\n?/, "").replace(/\n?```$/, ""))
+                                    appController.setBlockKind(block.id, "code")
+                                }
+                            }
                         }
                     }
                 }
@@ -605,10 +819,12 @@ ApplicationWindow {
     }
 
     footer: ToolBar {
-        height: 30
+        visible: !focusMode
+        height: focusMode ? 0 : 30
         background: Rectangle { color: theme.panel; border.color: theme.divider; border.width: 1 }
         contentItem: RowLayout {
             Label { text: appController.currentFile.isEmpty ? qsTr("Local document") : appController.currentFile; color: theme.faintText; font.pixelSize: 11; elide: Text.ElideMiddle; Layout.fillWidth: true; leftPadding: 14 }
+            Label { text: focusMode ? qsTr("Focus") : qsTr("%1 blocks").arg(appController.documentBlocks.length); color: theme.faintText; font.pixelSize: 11 }
             Label { text: qsTr("%1%").arg(Math.round(window.fontScale * 100)); color: theme.faintText; font.pixelSize: 11 }
             Label { text: qsTr("Marknote %1").arg(appController.version); color: theme.faintText; font.pixelSize: 11; rightPadding: 14 }
         }
@@ -668,14 +884,75 @@ ApplicationWindow {
     Connections {
         target: appController
         function onNotificationRequested(message) { toast.text = message; toast.open() }
-        function onCurrentFileChanged() { if (viewMode === 3) rebuildBlocks() }
-        function onDocumentTextChanged() {
-            rebuildOutline()
-            if (viewMode !== 3) {
-                rebuildBlocks()
+        function onImagePrepared(relativePath) {
+            if (viewMode === 3 && blockPane.activeBlock) {
+                appController.insertBlockAfter(blockPane.activeBlock.id, "paragraph")
+            }
+            editorPane.insertSnippet("![image](" + relativePath + ")")
+        }
+    }
+
+    Popup {
+        id: commandPalette
+        visible: commandPaletteVisible
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(parent.width - 48, 560)
+        padding: 12
+        modal: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        onClosed: commandPaletteVisible = false
+        onOpened: {
+            commandField.text = ""
+            refreshCommandList()
+            commandField.forceActiveFocus()
+        }
+        background: Rectangle { color: theme.elevated; border.color: theme.border; radius: theme.radius }
+
+        function refreshCommandList() {
+            filteredCommands.clear()
+            const query = commandField.text.trim().toLowerCase()
+            for (let i = 0; i < commandItems.length; ++i) {
+                const item = commandItems[i]
+                if (query.length === 0
+                        || item.title.toLowerCase().indexOf(query) >= 0
+                        || item.id.indexOf(query) >= 0) {
+                    filteredCommands.append({
+                        commandId: item.id,
+                        title: item.title,
+                        shortcut: item.shortcut
+                    })
+                }
             }
         }
-        function onImagePrepared(relativePath) { editorPane.insertSnippet("![image](" + relativePath + ")") }
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 8
+            TextField {
+                id: commandField
+                Layout.fillWidth: true
+                placeholderText: qsTr("Type a command…")
+                onTextChanged: commandPalette.refreshCommandList()
+                onAccepted: {
+                    if (filteredCommands.count > 0) {
+                        runCommand(filteredCommands.get(0).commandId)
+                    }
+                }
+            }
+            ListModel { id: filteredCommands }
+            ListView {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(contentHeight, 320)
+                clip: true
+                model: filteredCommands
+                delegate: ItemDelegate {
+                    width: ListView.view.width
+                    height: 36
+                    text: title + (shortcut ? "  ·  " + shortcut : "")
+                    onClicked: runCommand(commandId)
+                }
+            }
+        }
     }
 
     Popup {

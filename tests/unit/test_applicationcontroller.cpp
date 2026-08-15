@@ -15,6 +15,7 @@ private slots:
     void opensUtf16Markdown();
     void resolvesPreviewImagePath();
     void createsAndClosesDocument();
+    void buildsAstBlocksAndOutline();
 };
 
 void ApplicationControllerTest::startsWithoutAnOpenFile()
@@ -74,6 +75,21 @@ void ApplicationControllerTest::createsAndClosesDocument()
     controller.closeDocument();
     QVERIFY(!controller.hasDocument());
     QVERIFY(controller.documentText().isEmpty());
+}
+
+void ApplicationControllerTest::buildsAstBlocksAndOutline()
+{
+    ApplicationController controller;
+    controller.newDocument();
+    controller.setDocumentText(QStringLiteral("# Title\n\n- [ ] task\n\nParagraph\n"));
+    QVERIFY(controller.documentBlocks().size() >= 3);
+    QVERIFY(controller.documentOutline().size() >= 1);
+    QCOMPARE(controller.documentOutline().at(0).toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("Title"));
+    const QVariantMap first = controller.documentBlocks().at(0).toMap();
+    QVERIFY(controller.updateBlockDisplay(first.value(QStringLiteral("id")).toULongLong(),
+                                          QStringLiteral("Renamed")));
+    QVERIFY(controller.documentText().contains(QStringLiteral("# Renamed")));
 }
 
 QTEST_MAIN(ApplicationControllerTest)

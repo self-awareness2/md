@@ -12,16 +12,23 @@ The current build contains the Qt/QML application shell, cmark-gfm rendering,
 editable Markdown source, split/preview views, sidebar, save/Save As, HTML
 and PDF export, formatting shortcuts, undo/redo, find/replace, heading outline,
 dark appearance, image asset management, drag-and-drop insertion, and Qt Test
-coverage for the controller/parser foundation. A native block-editing mode now
-provides editable paragraph, heading, list, quote, code, and thematic-break
-blocks while keeping Markdown as the persisted source. Incremental AST
-reconciliation and richer table/media block delegates remain future work.
-Table insertion, crash-recovery snapshots, startup recovery, and external-file
-change detection are also enabled in the current shell. Preview links are
-resolved relative to the current Markdown file for local resources and opened
-through the platform desktop handler for external URLs.
-Source mode also uses a native Qt syntax highlighter for headings, emphasis,
-links, inline code, and list/quote markers.
+coverage for the controller/parser foundation.
+
+A project-owned Document AST (built from cmark-gfm with source spans and stable
+ID reconciliation) now drives outline navigation and block editing. Block mode
+edits display text for paragraphs, headings, quotes, lists, tasks, code, tables,
+thematic breaks, and YAML front matter, then serializes back to Markdown.
+Workspace folder browsing, command palette (`Ctrl+Shift+P`), focus mode
+(`F11`), list continuation in source mode, and task/strikethrough/link shortcuts
+are available in the shell.
+
+Richer table/media delegates, native reading renderer (non-HTML), math/diagram
+adapters, and workspace content search remain future work. Table insertion,
+crash-recovery snapshots, startup recovery, and external-file change detection
+are enabled. Preview links resolve relative to the current Markdown file for
+local resources and open through the platform desktop handler for external URLs.
+Source mode uses a native Qt syntax highlighter for headings, emphasis, links,
+inline code, and list/quote markers.
 
 ## Design documents
 

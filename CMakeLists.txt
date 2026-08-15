@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.10)
 
 project(Marknote VERSION 0.1.0 LANGUAGES CXX)
 
@@ -32,7 +32,17 @@ add_library(marknote_markdown STATIC
     src/markdown/markdownrenderer.h
     src/markdown/markdownsyntaxhighlighter.cpp
     src/markdown/markdownsyntaxhighlighter.h
+    src/markdown/documentast.cpp
+    src/markdown/documentast.h
 )
+
+add_library(marknote_workspace STATIC
+    src/workspace/workspaceservice.cpp
+    src/workspace/workspaceservice.h
+)
+
+target_include_directories(marknote_workspace PUBLIC src)
+target_link_libraries(marknote_workspace PUBLIC Qt6::Core Qt6::Widgets)
 
 target_include_directories(marknote_markdown
     PUBLIC src
@@ -82,6 +92,7 @@ qt_add_qml_module(marknote
 
 target_link_libraries(marknote PRIVATE
     marknote_markdown
+    marknote_workspace
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Gui
@@ -135,6 +146,7 @@ endif()
 
 target_link_libraries(marknote_smoke_test PRIVATE
     marknote_markdown
+    marknote_workspace
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
@@ -157,3 +169,18 @@ if(MSVC)
 endif()
 
 add_test(NAME marknote_markdown_test COMMAND marknote_markdown_test)
+
+qt_add_executable(marknote_documentast_test
+    tests/unit/test_documentast.cpp
+)
+
+target_link_libraries(marknote_documentast_test PRIVATE
+    marknote_markdown
+    Qt6::Test
+)
+
+if(MSVC)
+    target_compile_options(marknote_documentast_test PRIVATE /Zc:__cplusplus)
+endif()
+
+add_test(NAME marknote_documentast_test COMMAND marknote_documentast_test)

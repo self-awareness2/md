@@ -16,8 +16,9 @@ cmake --build build --config Release
 Run `build/marknote` on Linux, `build/Release/marknote.exe` on Windows, or the
 generated application bundle on macOS.
 
-The first implementation intentionally has no Markdown parser dependency yet;
-`cmark-gfm` will be introduced with the document module in Stage 1.
+The build fetches pinned `cmark-gfm` through CMake FetchContent and links it
+into the `marknote_markdown` library (HTML render, syntax highlighter, and
+project Document AST).
 
 ### Windows with MSVC
 
