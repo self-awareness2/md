@@ -89,6 +89,12 @@ ApplicationController::ApplicationController(QObject *parent)
     m_workspace = new WorkspaceService(this);
     connect(m_workspace, &WorkspaceService::notificationRequested,
             this, &ApplicationController::notificationRequested);
+    connect(m_workspace, &WorkspaceService::markdownFilesChanged,
+            this, &ApplicationController::workspaceNavigationChanged);
+    connect(m_workspace, &WorkspaceService::rootPathChanged,
+            this, &ApplicationController::workspaceNavigationChanged);
+    connect(this, &ApplicationController::currentFileChanged,
+            this, &ApplicationController::workspaceNavigationChanged);
     m_recoveryTimer = new QTimer(this);
     m_recoveryTimer->setSingleShot(true);
     m_recoveryTimer->setInterval(1500);
@@ -224,6 +230,78 @@ QVariantList ApplicationController::documentOutline() const
 WorkspaceService *ApplicationController::workspace() const
 {
     return m_workspace;
+}
+
+int ApplicationController::workspaceIndexOfCurrent() const
+{
+    if (m_workspace == nullptr || !m_workspace->hasWorkspace() || m_currentFile.isEmpty()) {
+        return -1;
+    }
+
+    const QString current = QFileInfo(m_currentFile).absoluteFilePath();
+    const QStringList files = m_workspace->markdownFiles();
+    for (int i = 0; i < files.size(); ++i) {
+        if (QFileInfo(files.at(i)).absoluteFilePath().compare(current, Qt::CaseInsensitive) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int ApplicationController::workspaceFileCount() const
+{
+    if (m_workspace == nullptr || !m_workspace->hasWorkspace()) {
+        return 0;
+    }
+    return m_workspace->markdownFiles().size();
+}
+
+int ApplicationController::workspaceFileIndex() const
+{
+    const int index = workspaceIndexOfCurrent();
+    return index < 0 ? 0 : index + 1;
+}
+
+bool ApplicationController::canOpenPreviousWorkspaceFile() const
+{
+    return workspaceIndexOfCurrent() > 0;
+}
+
+bool ApplicationController::canOpenNextWorkspaceFile() const
+{
+    const int index = workspaceIndexOfCurrent();
+    return index >= 0 && index + 1 < workspaceFileCount();
+}
+
+bool ApplicationController::openWorkspaceFileByDelta(int delta)
+{
+    const int index = workspaceIndexOfCurrent();
+    if (index < 0 || m_workspace == nullptr) {
+        return false;
+    }
+
+    const QStringList files = m_workspace->markdownFiles();
+    const int target = index + delta;
+    if (target < 0 || target >= files.size()) {
+        return false;
+    }
+
+    if (m_modified && !m_currentFile.isEmpty() && !save()) {
+        emit notificationRequested(tr("Save the current document before switching files"));
+        return false;
+    }
+
+    return openPath(files.at(target));
+}
+
+bool ApplicationController::openPreviousWorkspaceFile()
+{
+    return openWorkspaceFileByDelta(-1);
+}
+
+bool ApplicationController::openNextWorkspaceFile()
+{
+    return openWorkspaceFileByDelta(1);
 }
 
 void ApplicationController::rebuildAst()

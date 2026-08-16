@@ -31,6 +31,10 @@ class ApplicationController final : public QObject
     Q_PROPERTY(bool externalChangeDetected READ externalChangeDetected NOTIFY externalChangeDetectedChanged)
     Q_PROPERTY(QStringList recentFiles READ recentFiles NOTIFY recentFilesChanged)
     Q_PROPERTY(WorkspaceService *workspace READ workspace CONSTANT)
+    Q_PROPERTY(bool canOpenPreviousWorkspaceFile READ canOpenPreviousWorkspaceFile NOTIFY workspaceNavigationChanged)
+    Q_PROPERTY(bool canOpenNextWorkspaceFile READ canOpenNextWorkspaceFile NOTIFY workspaceNavigationChanged)
+    Q_PROPERTY(int workspaceFileIndex READ workspaceFileIndex NOTIFY workspaceNavigationChanged)
+    Q_PROPERTY(int workspaceFileCount READ workspaceFileCount NOTIFY workspaceNavigationChanged)
 
 public:
     explicit ApplicationController(QObject *parent = nullptr);
@@ -49,9 +53,15 @@ public:
     [[nodiscard]] bool externalChangeDetected() const;
     [[nodiscard]] QStringList recentFiles() const;
     [[nodiscard]] WorkspaceService *workspace() const;
+    [[nodiscard]] bool canOpenPreviousWorkspaceFile() const;
+    [[nodiscard]] bool canOpenNextWorkspaceFile() const;
+    [[nodiscard]] int workspaceFileIndex() const;
+    [[nodiscard]] int workspaceFileCount() const;
 
     Q_INVOKABLE void openFile();
     Q_INVOKABLE bool openPath(const QString &path);
+    Q_INVOKABLE bool openPreviousWorkspaceFile();
+    Q_INVOKABLE bool openNextWorkspaceFile();
     Q_INVOKABLE void newDocument();
     Q_INVOKABLE void closeDocument();
     Q_INVOKABLE bool save();
@@ -87,6 +97,7 @@ signals:
     void recoveryAvailableChanged();
     void externalChangeDetectedChanged();
     void recentFilesChanged();
+    void workspaceNavigationChanged();
 
 private:
     QString m_currentFile;
@@ -117,4 +128,6 @@ private:
     void applyDocumentText(const QString &text, bool markModified);
     [[nodiscard]] marknote::markdown::AstBlock *findBlock(qulonglong blockId);
     void replaceDocumentFromBlocks();
+    [[nodiscard]] int workspaceIndexOfCurrent() const;
+    bool openWorkspaceFileByDelta(int delta);
 };

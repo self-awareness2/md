@@ -25,6 +25,7 @@ public:
     Q_INVOKABLE void closeWorkspace();
     Q_INVOKABLE void refresh();
     Q_INVOKABLE QStringList searchFiles(const QString &query) const;
+    [[nodiscard]] Q_INVOKABLE QString relativePath(const QString &absolutePath) const;
 
 signals:
     void rootPathChanged();

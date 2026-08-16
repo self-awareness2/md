@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Marknote">
+  <defs>
+    <linearGradient id="bg" x1="20" y1="8" x2="108" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4db0ff"/>
+      <stop offset="55%" stop-color="#0a84ff"/>
+      <stop offset="100%" stop-color="#0060df"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <!-- App tile -->
+  <rect width="128" height="128" rx="30" fill="url(#bg)"/>
+  <path d="M0 30 A30 30 0 0 1 30 0 H98 A30 30 0 0 1 128 30 V58 H0 Z" fill="url(#sheen)"/>
+  <!-- Stylized lowercase m -->
+  <g fill="none" stroke="#ffffff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M34 96 V52"/>
+    <path d="M34 52 C34 30 64 30 64 52"/>
+    <path d="M64 96 V52"/>
+    <path d="M64 52 C64 30 94 30 94 52"/>
+    <path d="M94 96 V52"/>
+  </g>
+</svg>

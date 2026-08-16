@@ -26,7 +26,10 @@ FetchContent_Declare(cmark_gfm
     GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(cmark_gfm)
-
+if(MSVC)
+    target_compile_options(libcmark-gfm_static PRIVATE /WX-)
+    target_compile_options(libcmark-gfm-extensions_static PRIVATE /WX-)
+endif()
 add_library(marknote_markdown STATIC
     src/markdown/markdownrenderer.cpp
     src/markdown/markdownrenderer.h
@@ -80,6 +83,23 @@ qt_add_executable(marknote
     src/app/main.cpp
     src/app/applicationcontroller.cpp
     src/app/applicationcontroller.h
+)
+
+set_target_properties(marknote PROPERTIES
+    WIN32_EXECUTABLE TRUE
+    MACOSX_BUNDLE TRUE
+)
+
+if(WIN32)
+    target_sources(marknote PRIVATE resources/marknote.rc)
+endif()
+
+qt_add_resources(marknote "marknote_assets"
+    PREFIX "/marknote"
+    FILES
+        resources/icons/marknote.svg
+        resources/icons/marknote.png
+        resources/icons/marknote-256.png
 )
 
 qt_add_qml_module(marknote

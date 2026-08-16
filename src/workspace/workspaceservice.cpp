@@ -107,12 +107,26 @@ QStringList WorkspaceService::searchFiles(const QString &query) const
     const QString needle = query.trimmed();
     QStringList matches;
     for (const QString &path : m_markdownFiles) {
+        const QString relative = relativePath(path);
         if (path.contains(needle, Qt::CaseInsensitive)
+            || relative.contains(needle, Qt::CaseInsensitive)
             || QFileInfo(path).fileName().contains(needle, Qt::CaseInsensitive)) {
             matches.push_back(path);
         }
     }
     return matches;
+}
+
+QString WorkspaceService::relativePath(const QString &absolutePath) const
+{
+    if (m_rootPath.isEmpty()) {
+        return absolutePath;
+    }
+    const QString relative = QDir(m_rootPath).relativeFilePath(absolutePath);
+    if (relative.isEmpty() || relative == QLatin1String(".")) {
+        return QFileInfo(absolutePath).fileName();
+    }
+    return QDir::fromNativeSeparators(relative);
 }
 
 void WorkspaceService::scan()

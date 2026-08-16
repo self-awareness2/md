@@ -27,7 +27,8 @@ ApplicationWindow {
         highlightedText: "#ffffff"
     }
 
-    property int viewMode: 2 // 0: source, 1: preview, 2: split, 3: block
+    property int viewMode: 1 // 0: source, 1: preview, 2: split, 3: block
+    property int sidebarTab: 0 // 0: workspace, 1: recent, 2: outline
     property bool sidebarVisible: true
     property bool darkMode: false
     property bool findVisible: false
@@ -39,6 +40,29 @@ ApplicationWindow {
     function zoomIn() { fontScale = Math.min(1.6, fontScale + 0.1) }
     function zoomOut() { fontScale = Math.max(0.7, fontScale - 0.1) }
     function resetZoom() { fontScale = 1.0 }
+    function workspaceFileEntries() {
+        const files = workspaceFilter.length === 0
+                      ? appController.workspace.markdownFiles
+                      : appController.workspace.searchFiles(workspaceFilter)
+        const entries = []
+        for (let i = 0; i < files.length; ++i) {
+            const path = files[i]
+            const relative = appController.workspace.relativePath(path)
+            const slash = relative.lastIndexOf("/")
+            entries.push({
+                path: path,
+                name: slash >= 0 ? relative.slice(slash + 1) : relative,
+                dir: slash >= 0 ? relative.slice(0, slash) : ""
+            })
+        }
+        entries.sort(function(a, b) {
+            const dirCmp = a.dir.localeCompare(b.dir, undefined, { sensitivity: "base" })
+            if (dirCmp !== 0)
+                return dirCmp
+            return a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+        })
+        return entries
+    }
     function toggleFocusMode() {
         focusMode = !focusMode
         if (focusMode) {
@@ -52,6 +76,8 @@ ApplicationWindow {
         case "open": appController.openFile(); break
         case "save": appController.save(); break
         case "workspace": appController.workspace.openFolder(); break
+        case "prev-file": appController.openPreviousWorkspaceFile(); break
+        case "next-file": appController.openNextWorkspaceFile(); break
         case "source": viewMode = 0; break
         case "split": viewMode = 2; break
         case "preview": viewMode = 1; break
@@ -76,6 +102,8 @@ ApplicationWindow {
         { id: "open", title: qsTr("Open File"), shortcut: "Ctrl+O" },
         { id: "save", title: qsTr("Save"), shortcut: "Ctrl+S" },
         { id: "workspace", title: qsTr("Open Workspace Folder"), shortcut: "Ctrl+Shift+O" },
+        { id: "prev-file", title: qsTr("Previous Workspace File"), shortcut: "Ctrl+PageUp" },
+        { id: "next-file", title: qsTr("Next Workspace File"), shortcut: "Ctrl+PageDown" },
         { id: "source", title: qsTr("Source Mode"), shortcut: "Ctrl+1" },
         { id: "split", title: qsTr("Split Mode"), shortcut: "Ctrl+2" },
         { id: "preview", title: qsTr("Preview Mode"), shortcut: "Ctrl+3" },
@@ -106,6 +134,20 @@ ApplicationWindow {
     Action { id: commandPaletteAction; text: qsTr("Command Palette"); shortcut: "Ctrl+Shift+P"; onTriggered: commandPaletteVisible = true }
     Action { id: focusModeAction; text: qsTr("Focus Mode"); shortcut: "F11"; onTriggered: toggleFocusMode() }
     Action { id: openWorkspaceAction; text: qsTr("Open Workspace..."); shortcut: "Ctrl+Shift+O"; onTriggered: appController.workspace.openFolder() }
+    Action {
+        id: previousWorkspaceFileAction
+        text: qsTr("Previous File")
+        shortcut: "Ctrl+PageUp"
+        enabled: appController.canOpenPreviousWorkspaceFile
+        onTriggered: appController.openPreviousWorkspaceFile()
+    }
+    Action {
+        id: nextWorkspaceFileAction
+        text: qsTr("Next File")
+        shortcut: "Ctrl+PageDown"
+        enabled: appController.canOpenNextWorkspaceFile
+        onTriggered: appController.openNextWorkspaceFile()
+    }
     Action { id: sourceModeAction; text: qsTr("Source"); shortcut: "Ctrl+1"; onTriggered: viewMode = 0 }
     Action { id: splitModeAction; text: qsTr("Split"); shortcut: "Ctrl+2"; onTriggered: viewMode = 2 }
     Action { id: previewModeAction; text: qsTr("Preview"); shortcut: "Ctrl+3"; onTriggered: viewMode = 1 }
@@ -121,6 +163,18 @@ ApplicationWindow {
             Action { text: newAction.text; shortcut: newAction.shortcut; onTriggered: newAction.trigger() }
             Action { text: openAction.text; shortcut: openAction.shortcut; onTriggered: openAction.trigger() }
             Action { text: openWorkspaceAction.text; shortcut: openWorkspaceAction.shortcut; onTriggered: openWorkspaceAction.trigger() }
+            Action {
+                text: previousWorkspaceFileAction.text
+                shortcut: previousWorkspaceFileAction.shortcut
+                enabled: previousWorkspaceFileAction.enabled
+                onTriggered: previousWorkspaceFileAction.trigger()
+            }
+            Action {
+                text: nextWorkspaceFileAction.text
+                shortcut: nextWorkspaceFileAction.shortcut
+                enabled: nextWorkspaceFileAction.enabled
+                onTriggered: nextWorkspaceFileAction.trigger()
+            }
             MenuSeparator {}
             Action { text: saveAction.text; shortcut: saveAction.shortcut; onTriggered: saveAction.trigger() }
             Action { text: saveAsAction.text; shortcut: saveAsAction.shortcut; onTriggered: saveAsAction.trigger() }
@@ -167,12 +221,23 @@ ApplicationWindow {
         background: Rectangle { color: theme.panel; border.color: theme.divider; border.width: 1 }
         contentItem: RowLayout {
             spacing: 6
+            Image {
+                source: "qrc:/marknote/resources/icons/marknote.png"
+                sourceSize.width: 24
+                sourceSize.height: 24
+                Layout.preferredWidth: 24
+                Layout.preferredHeight: 24
+                Layout.leftMargin: 8
+                Layout.rightMargin: 2
+                smooth: true
+                mipmap: true
+            }
             ToolButton {
-                icon.name: sidebarVisible ? "sidebar" : "sidebar-show"
-                display: AbstractButton.IconOnly
+                text: sidebarVisible ? "◂" : "▸"
+                display: AbstractButton.TextOnly
                 onClicked: sidebarVisible = !sidebarVisible
                 ToolTip.visible: hovered
-                ToolTip.text: qsTr("Toggle sidebar")
+                ToolTip.text: sidebarVisible ? qsTr("Hide sidebar (Ctrl+Shift+B)") : qsTr("Show sidebar (Ctrl+Shift+B)")
             }
             ToolButton {
                 icon.name: "document-new"
@@ -208,6 +273,31 @@ ApplicationWindow {
                 font.weight: Font.DemiBold
                 elide: Text.ElideMiddle
                 Layout.maximumWidth: 360
+            }
+            RowLayout {
+                visible: appController.workspace.hasWorkspace && appController.workspaceFileIndex > 0
+                spacing: 2
+                ToolButton {
+                    text: "‹"
+                    display: AbstractButton.TextOnly
+                    enabled: previousWorkspaceFileAction.enabled
+                    onClicked: previousWorkspaceFileAction.trigger()
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Previous Markdown file (Ctrl+PageUp)")
+                }
+                Label {
+                    text: qsTr("%1 / %2").arg(appController.workspaceFileIndex).arg(appController.workspaceFileCount)
+                    color: theme.mutedText
+                    font.pixelSize: 11
+                }
+                ToolButton {
+                    text: "›"
+                    display: AbstractButton.TextOnly
+                    enabled: nextWorkspaceFileAction.enabled
+                    onClicked: nextWorkspaceFileAction.trigger()
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Next Markdown file (Ctrl+PageDown)")
+                }
             }
             Label { text: appController.modified ? qsTr("Unsaved") : ""; color: theme.accent; font.pixelSize: 12 }
             Label { text: appController.externalChangeDetected ? qsTr("Changed on disk") : ""; color: "#ff9f0a"; font.pixelSize: 12 }
@@ -261,121 +351,260 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
 
-        Pane {
-            visible: sidebarVisible && !focusMode
-            Layout.preferredWidth: 268
+        Item {
+            id: sidebarHost
+            visible: !focusMode
+            Layout.preferredWidth: sidebarVisible ? 268 : 32
+            Layout.minimumWidth: sidebarVisible ? 220 : 32
+            Layout.maximumWidth: sidebarVisible ? 420 : 32
             Layout.fillHeight: true
-            padding: 16
-            background: Rectangle { color: theme.panel; border.color: theme.divider; border.width: 1 }
-            ColumnLayout {
+            clip: true
+
+            Behavior on Layout.preferredWidth {
+                NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+            }
+
+            // Collapsed rail — click to restore sidebar
+            Rectangle {
                 anchors.fill: parent
-                spacing: 10
-                RowLayout {
-                    Layout.fillWidth: true
-                    Label { text: qsTr("WORKSPACE"); color: theme.faintText; font.pixelSize: 11; font.weight: Font.DemiBold; Layout.fillWidth: true }
-                    ToolButton {
-                        text: appController.workspace.hasWorkspace ? qsTr("↻") : qsTr("+")
-                        onClicked: appController.workspace.hasWorkspace ? appController.workspace.refresh() : appController.workspace.openFolder()
-                        ToolTip.visible: hovered
-                        ToolTip.text: appController.workspace.hasWorkspace ? qsTr("Refresh workspace") : qsTr("Open workspace folder")
-                    }
+                visible: !sidebarVisible
+                color: theme.panel
+                border.color: theme.divider
+                border.width: 1
+
+                ToolButton {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.top: parent.top
+                    anchors.topMargin: 10
+                    width: 28
+                    height: 28
+                    text: "›"
+                    display: AbstractButton.TextOnly
+                    onClicked: sidebarVisible = true
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Show sidebar (Ctrl+Shift+B)")
                 }
-                Label {
-                    text: appController.workspace.hasWorkspace ? appController.workspace.rootName : qsTr("No folder open")
-                    color: theme.text
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
-                    elide: Text.ElideMiddle
-                    Layout.fillWidth: true
-                }
-                TextField {
-                    visible: appController.workspace.hasWorkspace
-                    Layout.fillWidth: true
-                    placeholderText: qsTr("Filter files")
-                    text: workspaceFilter
-                    onTextChanged: workspaceFilter = text
-                }
-                ListView {
-                    id: workspaceList
-                    visible: appController.workspace.hasWorkspace
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(contentHeight, 180)
-                    clip: true
-                    model: {
-                        // Depend on markdownFiles so refreshes re-evaluate the filter.
-                        const allFiles = appController.workspace.markdownFiles
-                        return workspaceFilter.length === 0
-                               ? allFiles
-                               : appController.workspace.searchFiles(workspaceFilter)
-                    }
-                    delegate: ItemDelegate {
-                        width: ListView.view.width
-                        height: 28
-                        text: {
-                            const root = appController.workspace.rootPath
-                            const path = modelData
-                            if (root.length > 0 && path.indexOf(root) === 0) {
-                                return path.slice(root.length).replace(/^[\\/]/, "")
-                            }
-                            return path
+            }
+
+            Pane {
+                anchors.fill: parent
+                visible: sidebarVisible
+                padding: 16
+                background: Rectangle { color: theme.panel; border.color: theme.divider; border.width: 1 }
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 10
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        ToolButton {
+                            text: qsTr("Files")
+                            checkable: true
+                            checked: sidebarTab === 0
+                            Layout.fillWidth: true
+                            onClicked: sidebarTab = 0
                         }
-                        font.pixelSize: 11
-                        highlighted: appController.currentFile === modelData
-                        onClicked: appController.openPath(modelData)
-                    }
-                }
-                Label {
-                    visible: !appController.workspace.hasWorkspace
-                    text: qsTr("Open a folder to browse Markdown files.")
-                    color: theme.mutedText
-                    font.pixelSize: 11
-                    wrapMode: Text.Wrap
-                    Layout.fillWidth: true
-                }
-                RowLayout {
-                    Layout.fillWidth: true
-                    Label { text: qsTr("RECENT"); color: theme.faintText; font.pixelSize: 11; font.weight: Font.DemiBold; Layout.fillWidth: true }
-                    ToolButton { text: qsTr("Clear"); visible: appController.recentFiles.length > 0; onClicked: appController.clearRecentFiles() }
-                }
-                ListView {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(contentHeight, 120)
-                    model: appController.recentFiles
-                    clip: true
-                    delegate: ItemDelegate {
-                        width: ListView.view.width
-                        height: 28
-                        text: modelData.split(/[\\/]/).pop()
-                        font.pixelSize: 11
-                        onClicked: appController.openPath(modelData)
-                    }
-                    visible: count > 0
-                }
-                Label { text: qsTr("OUTLINE"); color: theme.faintText; font.pixelSize: 11; font.weight: Font.DemiBold; Layout.topMargin: 4 }
-                ListView {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    model: appController.documentOutline
-                    clip: true
-                    delegate: ItemDelegate {
-                        width: ListView.view.width
-                        height: 30
-                        leftPadding: 8 + ((modelData.level || 1) - 1) * 12
-                        text: modelData.title
-                        font.pixelSize: 12
-                        onClicked: {
-                            if (viewMode === 3) {
-                                blockPane.focusNear(modelData.position)
-                            } else {
-                                editorPane.revealPosition(modelData.position)
-                                if (viewMode === 1) viewMode = 2
-                            }
+                        ToolButton {
+                            text: qsTr("Recent")
+                            checkable: true
+                            checked: sidebarTab === 1
+                            Layout.fillWidth: true
+                            onClicked: sidebarTab = 1
+                        }
+                        ToolButton {
+                            text: qsTr("Outline")
+                            checkable: true
+                            checked: sidebarTab === 2
+                            Layout.fillWidth: true
+                            onClicked: sidebarTab = 2
+                        }
+                        ToolButton {
+                            text: "«"
+                            display: AbstractButton.TextOnly
+                            onClicked: sidebarVisible = false
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Hide sidebar (Ctrl+Shift+B)")
                         }
                     }
-                    visible: count > 0
+
+                    ColumnLayout {
+                        visible: sidebarTab === 0
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        spacing: 10
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label {
+                                text: appController.workspace.hasWorkspace ? appController.workspace.rootName : qsTr("No folder open")
+                                color: theme.text
+                                font.pixelSize: 13
+                                font.weight: Font.DemiBold
+                                elide: Text.ElideMiddle
+                                Layout.fillWidth: true
+                            }
+                            ToolButton {
+                                text: appController.workspace.hasWorkspace ? qsTr("↻") : qsTr("+")
+                                onClicked: appController.workspace.hasWorkspace ? appController.workspace.refresh() : appController.workspace.openFolder()
+                                ToolTip.visible: hovered
+                                ToolTip.text: appController.workspace.hasWorkspace ? qsTr("Refresh workspace") : qsTr("Open workspace folder")
+                            }
+                        }
+                        TextField {
+                            visible: appController.workspace.hasWorkspace
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("Filter files")
+                            text: workspaceFilter
+                            onTextChanged: workspaceFilter = text
+                        }
+                        ListView {
+                            id: workspaceList
+                            visible: appController.workspace.hasWorkspace
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            clip: true
+                            // Depend on markdownFiles/filter so the grouped list refreshes.
+                            model: {
+                                const _files = appController.workspace.markdownFiles
+                                const _filter = workspaceFilter
+                                return window.workspaceFileEntries()
+                            }
+                            section.property: "dir"
+                            section.criteria: ViewSection.FullString
+                            section.delegate: Item {
+                                required property string section
+                                width: ListView.view ? ListView.view.width : 0
+                                height: 22
+                                Label {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    leftPadding: 2
+                                    text: parent.section.length === 0 ? qsTr("Root") : parent.section
+                                    color: theme.faintText
+                                    font.pixelSize: 10
+                                    font.weight: Font.DemiBold
+                                    elide: Text.ElideMiddle
+                                    width: parent.width - 4
+                                }
+                            }
+                            delegate: ItemDelegate {
+                                width: ListView.view.width
+                                height: 28
+                                text: modelData.name
+                                font.pixelSize: 12
+                                highlighted: appController.currentFile === modelData.path
+                                ToolTip.visible: hovered
+                                ToolTip.text: modelData.dir.length === 0 ? modelData.name : (modelData.dir + "/" + modelData.name)
+                                ToolTip.delay: 400
+                                onClicked: appController.openPath(modelData.path)
+                            }
+                        }
+                        Label {
+                            visible: !appController.workspace.hasWorkspace
+                            text: qsTr("Open a folder to browse Markdown files.")
+                            color: theme.mutedText
+                            font.pixelSize: 11
+                            wrapMode: Text.Wrap
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                        }
+                    }
+
+                    ColumnLayout {
+                        visible: sidebarTab === 1
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        spacing: 10
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label {
+                                text: qsTr("Recent files")
+                                color: theme.mutedText
+                                font.pixelSize: 12
+                                Layout.fillWidth: true
+                            }
+                            ToolButton {
+                                text: qsTr("Clear")
+                                visible: appController.recentFiles.length > 0
+                                onClicked: appController.clearRecentFiles()
+                            }
+                        }
+                        ListView {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            model: appController.recentFiles
+                            clip: true
+                            delegate: ItemDelegate {
+                                width: ListView.view.width
+                                height: 28
+                                text: modelData.split(/[\\/]/).pop()
+                                font.pixelSize: 11
+                                onClicked: appController.openPath(modelData)
+                            }
+                            Label {
+                                anchors.centerIn: parent
+                                visible: parent.count === 0
+                                text: qsTr("No recent files")
+                                color: theme.mutedText
+                                font.pixelSize: 11
+                            }
+                        }
+                    }
+
+                    ColumnLayout {
+                        visible: sidebarTab === 2
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        spacing: 10
+                        Label {
+                            text: qsTr("Document outline")
+                            color: theme.mutedText
+                            font.pixelSize: 12
+                            Layout.fillWidth: true
+                        }
+                        ListView {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            model: appController.documentOutline
+                            clip: true
+                            delegate: ItemDelegate {
+                                width: ListView.view.width
+                                height: 30
+                                leftPadding: 8 + ((modelData.level || 1) - 1) * 12
+                                text: modelData.title
+                                font.pixelSize: 12
+                                onClicked: {
+                                    if (viewMode === 3) {
+                                        blockPane.focusNear(modelData.position)
+                                    } else {
+                                        editorPane.revealPosition(modelData.position)
+                                        if (viewMode === 1) viewMode = 2
+                                    }
+                                }
+                            }
+                            Label {
+                                anchors.centerIn: parent
+                                visible: parent.count === 0
+                                text: qsTr("No headings in this document")
+                                color: theme.mutedText
+                                font.pixelSize: 11
+                            }
+                        }
+                    }
+
+                    Label {
+                        text: qsTr("LOCAL DOCUMENT")
+                        color: theme.faintText
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                    }
+                    Label {
+                        text: appController.hasDocument ? appController.currentFile : qsTr("Open a Markdown file to get started")
+                        color: theme.mutedText
+                        font.pixelSize: 11
+                        wrapMode: Text.Wrap
+                        Layout.fillWidth: true
+                    }
                 }
-                Label { text: qsTr("LOCAL DOCUMENT"); color: theme.faintText; font.pixelSize: 11; font.weight: Font.DemiBold }
-                Label { text: appController.hasDocument ? appController.currentFile : qsTr("Open a Markdown file to get started"); color: theme.mutedText; font.pixelSize: 11; wrapMode: Text.Wrap; Layout.fillWidth: true }
             }
         }
 
@@ -399,19 +628,73 @@ ApplicationWindow {
                 }
 
                 RowLayout {
-                    Layout.fillWidth: true; Layout.fillHeight: true; spacing: 0
-                    EditorPane { id: editorPane; visible: viewMode === 0 || viewMode === 2; Layout.fillWidth: true; Layout.fillHeight: true; Layout.preferredWidth: 1 }
-                    Rectangle { visible: viewMode === 2; Layout.preferredWidth: 1; Layout.fillHeight: true; color: theme.divider }
-                    PreviewPane { visible: viewMode === 1 || viewMode === 2; Layout.fillWidth: true; Layout.fillHeight: true; Layout.preferredWidth: 1 }
-                    BlockPane { id: blockPane; visible: viewMode === 3; Layout.fillWidth: true; Layout.fillHeight: true; Layout.preferredWidth: 1 }
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 0
+                    EditorPane {
+                        id: editorPane
+                        visible: viewMode === 0 || viewMode === 2
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.preferredWidth: viewMode === 2 ? 2 : 1
+                        Layout.minimumWidth: viewMode === 2 ? 220 : 0
+                    }
+                    Rectangle {
+                        visible: viewMode === 2
+                        Layout.preferredWidth: 1
+                        Layout.fillHeight: true
+                        color: theme.divider
+                    }
+                    PreviewPane {
+                        visible: viewMode === 1 || viewMode === 2
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.preferredWidth: viewMode === 2 ? 3 : 1
+                        Layout.minimumWidth: viewMode === 2 ? 280 : 0
+                    }
+                    BlockPane {
+                        id: blockPane
+                        visible: viewMode === 3
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.preferredWidth: 1
+                    }
                 }
                 Label { text: qsTr("%1 words  /  %2 characters").arg(editorPane.wordCount).arg(appController.documentText.length); color: theme.faintText; font.pixelSize: 11; Layout.alignment: Qt.AlignRight; Layout.rightMargin: 28; Layout.bottomMargin: 10 }
             }
 
             ColumnLayout {
                 anchors.centerIn: parent; width: Math.min(parent.width - 64, 520); spacing: 14; visible: !appController.hasDocument
-                Label { text: qsTr("A quiet place for your words."); font.pixelSize: 28; font.weight: Font.DemiBold; color: theme.text; Layout.alignment: Qt.AlignHCenter }
-                Label { text: qsTr("Create a document or open an existing Markdown file to begin."); color: theme.mutedText; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                Image {
+                    source: "qrc:/marknote/resources/icons/marknote.png"
+                    sourceSize.width: 72
+                    sourceSize.height: 72
+                    Layout.preferredWidth: 72
+                    Layout.preferredHeight: 72
+                    Layout.alignment: Qt.AlignHCenter
+                    smooth: true
+                    mipmap: true
+                }
+                Label {
+                    text: qsTr("Marknote")
+                    font.pixelSize: 28
+                    font.weight: Font.DemiBold
+                    color: theme.text
+                    Layout.alignment: Qt.AlignHCenter
+                }
+                Label {
+                    text: qsTr("A quiet place for your words.")
+                    font.pixelSize: 15
+                    color: theme.mutedText
+                    Layout.alignment: Qt.AlignHCenter
+                }
+                Label {
+                    text: qsTr("Create a document or open an existing Markdown file to begin.")
+                    color: theme.mutedText
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
                 RowLayout { Layout.alignment: Qt.AlignHCenter; spacing: 8
                     Button { text: qsTr("New document"); icon.name: "document-new"; onClicked: appController.newDocument() }
                     Button { text: qsTr("Open file"); icon.name: "document-open"; highlighted: true; onClicked: appController.openFile() }
@@ -795,25 +1078,63 @@ ApplicationWindow {
         }
     }
 
-    component PreviewPane: ScrollView {
-        clip: true
-        Rectangle {
-            color: theme.document
-            implicitWidth: Math.max(parent ? parent.width : 0, 420)
-            implicitHeight: preview.contentHeight + 64
-            TextEdit {
-                id: preview
-                anchors.left: parent.left; anchors.right: parent.right
-                readOnly: true
-                selectByMouse: true
-                textFormat: TextEdit.RichText
-                text: appController.documentPreviewHtml
-                wrapMode: TextEdit.Wrap
-                color: theme.text
-                font.family: "Segoe UI"
-                font.pixelSize: 16 * window.fontScale
-                leftPadding: 36; rightPadding: 36; topPadding: 24; bottomPadding: 40
-                onLinkActivated: function(link) { appController.openLink(link) }
+    component PreviewPane: Item {
+        Flickable {
+            id: previewFlick
+            anchors.fill: parent
+            clip: true
+            contentWidth: width
+            contentHeight: previewContainer.height
+            boundsBehavior: Flickable.StopAtBounds
+            flickableDirection: Flickable.VerticalFlick
+            interactive: true
+
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+            }
+
+            Item {
+                id: previewContainer
+                width: previewFlick.width
+                height: Math.max(preview.paddedHeight, previewFlick.height)
+
+                Rectangle {
+                    anchors.fill: parent
+                    color: theme.document
+                }
+
+                TextEdit {
+                    id: preview
+                    readonly property real paddedHeight: contentHeight + topPadding + bottomPadding
+                    width: parent.width
+                    height: paddedHeight
+                    readOnly: true
+                    selectByMouse: true
+                    textFormat: TextEdit.RichText
+                    text: appController.documentPreviewHtml
+                    wrapMode: TextEdit.Wrap
+                    color: theme.text
+                    font.family: "Segoe UI"
+                    font.pixelSize: 16 * window.fontScale
+                    leftPadding: 36
+                    rightPadding: 36
+                    topPadding: 24
+                    bottomPadding: 40
+                    onLinkActivated: function(link) { appController.openLink(link) }
+                }
+            }
+        }
+
+        // Viewport overlay: TextEdit steals wheel events, so forward them here.
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.NoButton
+            hoverEnabled: false
+            onWheel: function(wheel) {
+                const dy = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.pixelDelta.y
+                const maxY = Math.max(0, previewFlick.contentHeight - previewFlick.height)
+                previewFlick.contentY = Math.max(0, Math.min(maxY, previewFlick.contentY - dy))
+                wheel.accepted = true
             }
         }
     }

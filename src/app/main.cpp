@@ -2,6 +2,7 @@
 #include "markdown/markdownsyntaxhighlighter.h"
 
 #include <QApplication>
+#include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QUrl>
@@ -15,6 +16,7 @@ int main(int argc, char *argv[])
     app.setApplicationName(QStringLiteral("Marknote"));
     app.setApplicationDisplayName(QStringLiteral("Marknote"));
     app.setOrganizationName(QStringLiteral("Marknote"));
+    app.setWindowIcon(QIcon(QStringLiteral(":/marknote/resources/icons/marknote.png")));
 
     ApplicationController controller;
     QQmlApplicationEngine engine;
