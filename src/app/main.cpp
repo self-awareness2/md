@@ -21,6 +21,7 @@ int main(int argc, char *argv[])
     ApplicationController controller;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("appController"), &controller);
+    controller.setQmlEngine(&engine);
 
     const QUrl mainUrl(QStringLiteral("qrc:/qt/qml/Marknote/qml/Main.qml"));
     QObject::connect(

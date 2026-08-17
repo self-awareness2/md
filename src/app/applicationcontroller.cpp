@@ -1,6 +1,7 @@
 #include "applicationcontroller.h"
 #include "markdown/markdownrenderer.h"
 
+#include <QCoreApplication>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFile>
@@ -13,6 +14,9 @@
 #include <QUrl>
 #include <QSettings>
 #include <QRegularExpression>
+#include <QTranslator>
+#include <QQmlEngine>
+#include <QVariantMap>
 #include <QtGui/QPdfWriter>
 #include <QtGui/QTextDocument>
 #include <QtGui/QPageSize>
@@ -87,6 +91,7 @@ ApplicationController::ApplicationController(QObject *parent)
     : QObject(parent)
 {
     m_workspace = new WorkspaceService(this);
+    m_translator = new QTranslator(this);
     connect(m_workspace, &WorkspaceService::notificationRequested,
             this, &ApplicationController::notificationRequested);
     connect(m_workspace, &WorkspaceService::markdownFilesChanged,
@@ -113,6 +118,171 @@ ApplicationController::ApplicationController(QObject *parent)
             ++it;
         }
     }
+    loadUiSettings();
+}
+
+void ApplicationController::setQmlEngine(QQmlEngine *engine)
+{
+    m_qmlEngine = engine;
+    applyLanguage();
+}
+
+void ApplicationController::loadUiSettings()
+{
+    QSettings settings;
+    m_language = settings.value(QStringLiteral("ui/language"), QStringLiteral("en")).toString();
+    m_paperTheme = settings.value(QStringLiteral("ui/paperTheme"), QStringLiteral("default")).toString();
+    m_darkMode = settings.value(QStringLiteral("ui/darkMode"), false).toBool();
+    if (m_language != QStringLiteral("en") && m_language != QStringLiteral("zh_CN")) {
+        m_language = QStringLiteral("en");
+    }
+    const QStringList papers{
+        QStringLiteral("default"),
+        QStringLiteral("cream"),
+        QStringLiteral("sepia"),
+        QStringLiteral("mint"),
+        QStringLiteral("night"),
+    };
+    if (!papers.contains(m_paperTheme)) {
+        m_paperTheme = QStringLiteral("default");
+    }
+}
+
+void ApplicationController::saveUiSettings() const
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("ui/language"), m_language);
+    settings.setValue(QStringLiteral("ui/paperTheme"), m_paperTheme);
+    settings.setValue(QStringLiteral("ui/darkMode"), m_darkMode);
+}
+
+void ApplicationController::applyLanguage()
+{
+    QCoreApplication::removeTranslator(m_translator);
+    bool loaded = false;
+    if (m_language == QStringLiteral("zh_CN")) {
+        loaded = m_translator->load(QStringLiteral(":/i18n/marknote_zh_CN.qm"));
+        if (!loaded) {
+            loaded = m_translator->load(QStringLiteral("marknote_zh_CN"),
+                                        QStringLiteral(":/i18n"));
+        }
+        if (loaded) {
+            QCoreApplication::installTranslator(m_translator);
+        }
+    }
+    if (m_qmlEngine != nullptr) {
+        m_qmlEngine->retranslate();
+    }
+}
+
+QString ApplicationController::language() const
+{
+    return m_language;
+}
+
+QString ApplicationController::paperTheme() const
+{
+    return m_paperTheme;
+}
+
+bool ApplicationController::darkMode() const
+{
+    return m_darkMode;
+}
+
+void ApplicationController::setLanguage(const QString &language)
+{
+    QString normalized = language;
+    if (normalized == QStringLiteral("zh") || normalized == QStringLiteral("zh-CN")) {
+        normalized = QStringLiteral("zh_CN");
+    }
+    if (normalized != QStringLiteral("en") && normalized != QStringLiteral("zh_CN")) {
+        normalized = QStringLiteral("en");
+    }
+    if (m_language == normalized) {
+        return;
+    }
+    m_language = normalized;
+    saveUiSettings();
+    applyLanguage();
+    emit languageChanged();
+    emit notificationRequested(
+        m_language == QStringLiteral("zh_CN")
+            ? QStringLiteral("界面语言已切换为中文")
+            : QStringLiteral("Interface language switched to English"));
+}
+
+void ApplicationController::setPaperTheme(const QString &paperTheme)
+{
+    const QStringList papers{
+        QStringLiteral("default"),
+        QStringLiteral("cream"),
+        QStringLiteral("sepia"),
+        QStringLiteral("mint"),
+        QStringLiteral("night"),
+    };
+    const QString normalized = papers.contains(paperTheme) ? paperTheme : QStringLiteral("default");
+    if (m_paperTheme == normalized) {
+        return;
+    }
+    m_paperTheme = normalized;
+    saveUiSettings();
+    emit paperThemeChanged();
+}
+
+void ApplicationController::setDarkMode(bool darkMode)
+{
+    if (m_darkMode == darkMode) {
+        return;
+    }
+    m_darkMode = darkMode;
+    saveUiSettings();
+    emit darkModeChanged();
+}
+
+QVariantList ApplicationController::availableLanguages() const
+{
+    QVariantList list;
+    list.push_back(QVariantMap{
+        {QStringLiteral("id"), QStringLiteral("en")},
+        {QStringLiteral("title"), QStringLiteral("English")},
+    });
+    list.push_back(QVariantMap{
+        {QStringLiteral("id"), QStringLiteral("zh_CN")},
+        {QStringLiteral("title"), QStringLiteral("简体中文")},
+    });
+    return list;
+}
+
+QVariantList ApplicationController::availablePaperThemes() const
+{
+    QVariantList list;
+    list.push_back(QVariantMap{
+        {QStringLiteral("id"), QStringLiteral("default")},
+        {QStringLiteral("title"), tr("Default")},
+        {QStringLiteral("color"), QStringLiteral("#ffffff")},
+    });
+    list.push_back(QVariantMap{
+        {QStringLiteral("id"), QStringLiteral("cream")},
+        {QStringLiteral("title"), tr("Cream")},
+        {QStringLiteral("color"), QStringLiteral("#f4efe4")},
+    });
+    list.push_back(QVariantMap{
+        {QStringLiteral("id"), QStringLiteral("sepia")},
+        {QStringLiteral("title"), tr("Sepia")},
+        {QStringLiteral("color"), QStringLiteral("#efe2c8")},
+    });
+    list.push_back(QVariantMap{
+        {QStringLiteral("id"), QStringLiteral("mint")},
+        {QStringLiteral("title"), tr("Mint")},
+        {QStringLiteral("color"), QStringLiteral("#e7efea")},
+    });
+    list.push_back(QVariantMap{
+        {QStringLiteral("id"), QStringLiteral("night")},
+        {QStringLiteral("title"), tr("Night")},
+        {QStringLiteral("color"), QStringLiteral("#1b1e24")},
+    });
+    return list;
 }
 
 QString ApplicationController::version() const

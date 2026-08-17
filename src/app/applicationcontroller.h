@@ -13,6 +13,8 @@
 
 class QTimer;
 class QFileSystemWatcher;
+class QTranslator;
+class QQmlEngine;
 
 class ApplicationController final : public QObject
 {
@@ -35,9 +37,14 @@ class ApplicationController final : public QObject
     Q_PROPERTY(bool canOpenNextWorkspaceFile READ canOpenNextWorkspaceFile NOTIFY workspaceNavigationChanged)
     Q_PROPERTY(int workspaceFileIndex READ workspaceFileIndex NOTIFY workspaceNavigationChanged)
     Q_PROPERTY(int workspaceFileCount READ workspaceFileCount NOTIFY workspaceNavigationChanged)
+    Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged)
+    Q_PROPERTY(QString paperTheme READ paperTheme WRITE setPaperTheme NOTIFY paperThemeChanged)
+    Q_PROPERTY(bool darkMode READ darkMode WRITE setDarkMode NOTIFY darkModeChanged)
 
 public:
     explicit ApplicationController(QObject *parent = nullptr);
+
+    void setQmlEngine(QQmlEngine *engine);
 
     [[nodiscard]] QString version() const;
     [[nodiscard]] QString currentFile() const;
@@ -57,6 +64,15 @@ public:
     [[nodiscard]] bool canOpenNextWorkspaceFile() const;
     [[nodiscard]] int workspaceFileIndex() const;
     [[nodiscard]] int workspaceFileCount() const;
+    [[nodiscard]] QString language() const;
+    [[nodiscard]] QString paperTheme() const;
+    [[nodiscard]] bool darkMode() const;
+
+    Q_INVOKABLE void setLanguage(const QString &language);
+    Q_INVOKABLE void setPaperTheme(const QString &paperTheme);
+    Q_INVOKABLE void setDarkMode(bool darkMode);
+    Q_INVOKABLE QVariantList availableLanguages() const;
+    Q_INVOKABLE QVariantList availablePaperThemes() const;
 
     Q_INVOKABLE void openFile();
     Q_INVOKABLE bool openPath(const QString &path);
@@ -98,6 +114,9 @@ signals:
     void externalChangeDetectedChanged();
     void recentFilesChanged();
     void workspaceNavigationChanged();
+    void languageChanged();
+    void paperThemeChanged();
+    void darkModeChanged();
 
 private:
     QString m_currentFile;
@@ -110,12 +129,17 @@ private:
     bool m_recoveryAvailable = false;
     bool m_externalChangeDetected = false;
     bool m_suppressBlockRebuild = false;
+    bool m_darkMode = false;
+    QString m_language = QStringLiteral("en");
+    QString m_paperTheme = QStringLiteral("default");
     QFileSystemWatcher *m_fileWatcher = nullptr;
     QDateTime m_lastDiskModified;
     qint64 m_lastDiskSize = -1;
     QStringList m_recentFiles;
     QTimer *m_recoveryTimer = nullptr;
     WorkspaceService *m_workspace = nullptr;
+    QTranslator *m_translator = nullptr;
+    QQmlEngine *m_qmlEngine = nullptr;
 
     [[nodiscard]] QString recoveryPath() const;
     void writeRecovery();
@@ -130,4 +154,7 @@ private:
     void replaceDocumentFromBlocks();
     [[nodiscard]] int workspaceIndexOfCurrent() const;
     bool openWorkspaceFileByDelta(int delta);
+    void loadUiSettings();
+    void saveUiSettings() const;
+    void applyLanguage();
 };

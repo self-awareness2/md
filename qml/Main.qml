@@ -14,7 +14,7 @@ ApplicationWindow {
            + (appController.hasDocument ? appController.currentFileName : qsTr("Untitled"))
            + qsTr(" - Marknote")
 
-    Theme { id: theme; dark: window.darkMode }
+    Theme { id: theme; dark: appController.darkMode; paper: appController.paperTheme }
 
     palette {
         window: theme.window
@@ -30,7 +30,6 @@ ApplicationWindow {
     property int viewMode: 1 // 0: source, 1: preview, 2: split, 3: block
     property int sidebarTab: 0 // 0: workspace, 1: recent, 2: outline
     property bool sidebarVisible: true
-    property bool darkMode: false
     property bool findVisible: false
     property bool focusMode: false
     property bool commandPaletteVisible: false
@@ -83,7 +82,14 @@ ApplicationWindow {
         case "preview": viewMode = 1; break
         case "blocks": viewMode = 3; break
         case "focus": toggleFocusMode(); break
-        case "dark": darkMode = !darkMode; break
+        case "dark": appController.darkMode = !appController.darkMode; break
+        case "lang-en": appController.language = "en"; break
+        case "lang-zh": appController.language = "zh_CN"; break
+        case "paper-default": appController.paperTheme = "default"; break
+        case "paper-cream": appController.paperTheme = "cream"; break
+        case "paper-sepia": appController.paperTheme = "sepia"; break
+        case "paper-mint": appController.paperTheme = "mint"; break
+        case "paper-night": appController.paperTheme = "night"; break
         case "find": findVisible = true; break
         case "export-html": appController.exportHtmlAs(); break
         case "export-pdf": appController.exportPdfAs(); break
@@ -97,30 +103,46 @@ ApplicationWindow {
         }
     }
 
-    readonly property var commandItems: [
-        { id: "new", title: qsTr("New Document"), shortcut: "Ctrl+N" },
-        { id: "open", title: qsTr("Open File"), shortcut: "Ctrl+O" },
-        { id: "save", title: qsTr("Save"), shortcut: "Ctrl+S" },
-        { id: "workspace", title: qsTr("Open Workspace Folder"), shortcut: "Ctrl+Shift+O" },
-        { id: "prev-file", title: qsTr("Previous Workspace File"), shortcut: "Ctrl+PageUp" },
-        { id: "next-file", title: qsTr("Next Workspace File"), shortcut: "Ctrl+PageDown" },
-        { id: "source", title: qsTr("Source Mode"), shortcut: "Ctrl+1" },
-        { id: "split", title: qsTr("Split Mode"), shortcut: "Ctrl+2" },
-        { id: "preview", title: qsTr("Preview Mode"), shortcut: "Ctrl+3" },
-        { id: "blocks", title: qsTr("Block Editing Mode"), shortcut: "Ctrl+4" },
-        { id: "focus", title: qsTr("Toggle Focus Mode"), shortcut: "F11" },
-        { id: "dark", title: qsTr("Toggle Dark Appearance"), shortcut: "" },
-        { id: "find", title: qsTr("Find in Document"), shortcut: "Ctrl+F" },
-        { id: "heading", title: qsTr("Insert Heading"), shortcut: "" },
-        { id: "bullet", title: qsTr("Insert Bullet List"), shortcut: "" },
-        { id: "task", title: qsTr("Insert Task List"), shortcut: "" },
-        { id: "quote", title: qsTr("Insert Quote"), shortcut: "" },
-        { id: "code", title: qsTr("Insert Code Block"), shortcut: "" },
-        { id: "table", title: qsTr("Insert Table"), shortcut: "" },
-        { id: "image", title: qsTr("Insert Image"), shortcut: "" },
-        { id: "export-html", title: qsTr("Export HTML"), shortcut: "" },
-        { id: "export-pdf", title: qsTr("Export PDF"), shortcut: "" }
-    ]
+    property var commandItems: []
+    function rebuildCommandItems() {
+        commandItems = [
+            { id: "new", title: qsTr("New Document"), shortcut: "Ctrl+N" },
+            { id: "open", title: qsTr("Open File"), shortcut: "Ctrl+O" },
+            { id: "save", title: qsTr("Save"), shortcut: "Ctrl+S" },
+            { id: "workspace", title: qsTr("Open Workspace Folder"), shortcut: "Ctrl+Shift+O" },
+            { id: "prev-file", title: qsTr("Previous Workspace File"), shortcut: "Ctrl+PageUp" },
+            { id: "next-file", title: qsTr("Next Workspace File"), shortcut: "Ctrl+PageDown" },
+            { id: "source", title: qsTr("Source Mode"), shortcut: "Ctrl+1" },
+            { id: "split", title: qsTr("Split Mode"), shortcut: "Ctrl+2" },
+            { id: "preview", title: qsTr("Preview Mode"), shortcut: "Ctrl+3" },
+            { id: "blocks", title: qsTr("Block Editing Mode"), shortcut: "Ctrl+4" },
+            { id: "focus", title: qsTr("Toggle Focus Mode"), shortcut: "F11" },
+            { id: "dark", title: qsTr("Toggle Dark Appearance"), shortcut: "" },
+            { id: "lang-en", title: qsTr("Language: English"), shortcut: "" },
+            { id: "lang-zh", title: qsTr("Language: 简体中文"), shortcut: "" },
+            { id: "paper-default", title: qsTr("Paper: Default"), shortcut: "" },
+            { id: "paper-cream", title: qsTr("Paper: Cream"), shortcut: "" },
+            { id: "paper-sepia", title: qsTr("Paper: Sepia"), shortcut: "" },
+            { id: "paper-mint", title: qsTr("Paper: Mint"), shortcut: "" },
+            { id: "paper-night", title: qsTr("Paper: Night"), shortcut: "" },
+            { id: "find", title: qsTr("Find in Document"), shortcut: "Ctrl+F" },
+            { id: "heading", title: qsTr("Insert Heading"), shortcut: "" },
+            { id: "bullet", title: qsTr("Insert Bullet List"), shortcut: "" },
+            { id: "task", title: qsTr("Insert Task List"), shortcut: "" },
+            { id: "quote", title: qsTr("Insert Quote"), shortcut: "" },
+            { id: "code", title: qsTr("Insert Code Block"), shortcut: "" },
+            { id: "table", title: qsTr("Insert Table"), shortcut: "" },
+            { id: "image", title: qsTr("Insert Image"), shortcut: "" },
+            { id: "export-html", title: qsTr("Export HTML"), shortcut: "" },
+            { id: "export-pdf", title: qsTr("Export PDF"), shortcut: "" }
+        ]
+    }
+
+    Component.onCompleted: rebuildCommandItems()
+    Connections {
+        target: appController
+        function onLanguageChanged() { rebuildCommandItems() }
+    }
 
     Action { id: newAction; text: qsTr("New Document"); shortcut: StandardKey.New; onTriggered: appController.newDocument() }
     Action { id: openAction; text: qsTr("Open..."); shortcut: StandardKey.Open; onTriggered: appController.openFile() }
@@ -206,11 +228,67 @@ ApplicationWindow {
             MenuSeparator {}
             Action { text: qsTr("Toggle Sidebar"); shortcut: "Ctrl+Shift+B"; onTriggered: sidebarVisible = !sidebarVisible }
             Action { text: focusModeAction.text; shortcut: focusModeAction.shortcut; checkable: true; checked: focusMode; onTriggered: toggleFocusMode() }
-            Action { text: qsTr("Toggle Dark Appearance"); checkable: true; checked: darkMode; onTriggered: darkMode = !darkMode }
+            Action {
+                text: qsTr("Toggle Dark Appearance")
+                checkable: true
+                checked: appController.darkMode
+                onTriggered: appController.darkMode = !appController.darkMode
+            }
             MenuSeparator {}
             Action { text: zoomInAction.text; shortcut: zoomInAction.shortcut; onTriggered: zoomInAction.trigger() }
             Action { text: zoomOutAction.text; shortcut: zoomOutAction.shortcut; onTriggered: zoomOutAction.trigger() }
             Action { text: resetZoomAction.text; shortcut: resetZoomAction.shortcut; onTriggered: resetZoomAction.trigger() }
+        }
+        Menu {
+            title: qsTr("Settings")
+            Menu {
+                title: qsTr("Language")
+                Action {
+                    text: qsTr("English")
+                    checkable: true
+                    checked: appController.language === "en"
+                    onTriggered: appController.language = "en"
+                }
+                Action {
+                    text: "简体中文"
+                    checkable: true
+                    checked: appController.language === "zh_CN"
+                    onTriggered: appController.language = "zh_CN"
+                }
+            }
+            Menu {
+                title: qsTr("Paper")
+                Action {
+                    text: qsTr("Default")
+                    checkable: true
+                    checked: appController.paperTheme === "default"
+                    onTriggered: appController.paperTheme = "default"
+                }
+                Action {
+                    text: qsTr("Cream")
+                    checkable: true
+                    checked: appController.paperTheme === "cream"
+                    onTriggered: appController.paperTheme = "cream"
+                }
+                Action {
+                    text: qsTr("Sepia")
+                    checkable: true
+                    checked: appController.paperTheme === "sepia"
+                    onTriggered: appController.paperTheme = "sepia"
+                }
+                Action {
+                    text: qsTr("Mint")
+                    checkable: true
+                    checked: appController.paperTheme === "mint"
+                    onTriggered: appController.paperTheme = "mint"
+                }
+                Action {
+                    text: qsTr("Night")
+                    checkable: true
+                    checked: appController.paperTheme === "night"
+                    onTriggered: appController.paperTheme = "night"
+                }
+            }
         }
     }
 
@@ -332,6 +410,31 @@ ApplicationWindow {
                 ToolButton { text: "T"; onClicked: blockPane.insertTable(); ToolTip.visible: hovered; ToolTip.text: qsTr("Insert table block") }
             }
             ToolButton { text: qsTr("Focus"); checkable: true; checked: focusMode; onClicked: toggleFocusMode(); ToolTip.visible: hovered; ToolTip.text: qsTr("Focus mode") }
+            RowLayout {
+                spacing: 4
+                Layout.leftMargin: 4
+                Repeater {
+                    model: {
+                        const _lang = appController.language
+                        return appController.availablePaperThemes()
+                    }
+                    RoundButton {
+                        implicitWidth: 18
+                        implicitHeight: 18
+                        checkable: true
+                        checked: appController.paperTheme === modelData.id
+                        onClicked: appController.paperTheme = modelData.id
+                        background: Rectangle {
+                            radius: width / 2
+                            color: modelData.color
+                            border.color: parent.checked ? theme.accent : theme.border
+                            border.width: parent.checked ? 2 : 1
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: modelData.title
+                    }
+                }
+            }
             ToolButton { text: "⌘"; onClicked: commandPaletteVisible = true; ToolTip.visible: hovered; ToolTip.text: qsTr("Command palette") }
             ToolButton {
                 icon.name: "document-export"
@@ -873,7 +976,7 @@ ApplicationWindow {
         }
         MarkdownSyntaxHighlighter {
             document: editor.textDocument
-            dark: window.darkMode
+            dark: appController.darkMode
         }
         DropArea {
             anchors.fill: parent
@@ -1079,6 +1182,32 @@ ApplicationWindow {
     }
 
     component PreviewPane: Item {
+        property bool previewReady: true
+
+        function resetPreviewScroll() {
+            previewFlick.contentY = 0
+            Qt.callLater(function() {
+                previewFlick.contentY = 0
+                previewFlick.returnToBounds()
+                previewFlick.clampScroll()
+            })
+        }
+
+        function reloadPreview() {
+            // Clear then restore on the next tick so RichText drops stale layout metrics.
+            previewReady = false
+            previewFlick.contentY = 0
+            Qt.callLater(function() {
+                previewReady = true
+                resetPreviewScroll()
+            })
+        }
+
+        Connections {
+            target: appController
+            function onCurrentFileChanged() { reloadPreview() }
+        }
+
         Flickable {
             id: previewFlick
             anchors.fill: parent
@@ -1088,6 +1217,17 @@ ApplicationWindow {
             boundsBehavior: Flickable.StopAtBounds
             flickableDirection: Flickable.VerticalFlick
             interactive: true
+
+            function clampScroll() {
+                const maxY = Math.max(0, contentHeight - height)
+                if (contentY > maxY)
+                    contentY = maxY
+                else if (contentY < 0)
+                    contentY = 0
+            }
+
+            onHeightChanged: clampScroll()
+            onContentHeightChanged: clampScroll()
 
             ScrollBar.vertical: ScrollBar {
                 policy: ScrollBar.AsNeeded
@@ -1105,13 +1245,13 @@ ApplicationWindow {
 
                 TextEdit {
                     id: preview
-                    readonly property real paddedHeight: contentHeight + topPadding + bottomPadding
+                    readonly property real paddedHeight: Math.max(contentHeight, 0) + topPadding + bottomPadding
                     width: parent.width
                     height: paddedHeight
                     readOnly: true
                     selectByMouse: true
                     textFormat: TextEdit.RichText
-                    text: appController.documentPreviewHtml
+                    text: previewReady ? appController.documentPreviewHtml : ""
                     wrapMode: TextEdit.Wrap
                     color: theme.text
                     font.family: "Segoe UI"
@@ -1121,6 +1261,7 @@ ApplicationWindow {
                     topPadding: 24
                     bottomPadding: 40
                     onLinkActivated: function(link) { appController.openLink(link) }
+                    onContentHeightChanged: previewFlick.clampScroll()
                 }
             }
         }
@@ -1131,6 +1272,7 @@ ApplicationWindow {
             acceptedButtons: Qt.NoButton
             hoverEnabled: false
             onWheel: function(wheel) {
+                previewFlick.clampScroll()
                 const dy = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.pixelDelta.y
                 const maxY = Math.max(0, previewFlick.contentHeight - previewFlick.height)
                 previewFlick.contentY = Math.max(0, Math.min(maxY, previewFlick.contentY - dy))

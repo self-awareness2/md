@@ -12,7 +12,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Quick QuickControls2 Widgets Gui Test)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Quick QuickControls2 Widgets Gui Test LinguistTools)
 
 # cmark-gfm is pinned so parser behavior remains reproducible across platforms.
 # Disable its auxiliary targets; Marknote only consumes the two static libraries.
@@ -121,6 +121,11 @@ target_link_libraries(marknote PRIVATE
 
 target_compile_definitions(marknote PRIVATE
     MARKNOTE_VERSION="${PROJECT_VERSION}"
+)
+
+qt_add_translations(marknote
+    TS_FILES translations/marknote_zh_CN.ts
+    RESOURCE_PREFIX "/i18n"
 )
 
 option(MARKNOTE_DEPLOY_QT
